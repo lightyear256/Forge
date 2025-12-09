@@ -59,7 +59,7 @@ services:
       NEXT_PUBLIC_WS_URL: ws://13.126.199.238/api
 
     depends_on:
-      - backenda
+      - backend
     restart: unless-stopped
 
 volumes:
