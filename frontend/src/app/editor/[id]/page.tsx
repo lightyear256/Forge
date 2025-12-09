@@ -108,7 +108,7 @@ export default function CodeEditor() {
   }, [projectId]);
 
   useEffect(() => {
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000', {
+    const newSocket = io(process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:5000', {
       transports: ['websocket'],
       reconnection: true
     });
