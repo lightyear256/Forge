@@ -1,0 +1,40 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "redis": "docker ps --filter \"name=redis\" --filter \"status=running\" | grep redis || docker start redis || docker run -d --name redis -p 6379:6379 redis",
+    "pull-images": "node ./dist/scripts/pull-docker-images.js",
+    "build": "tsc -b  ",
+    "build:fast": "tsc -b",
+    "start": "npm run pull-images && node ./dist/server.js",
+    "dev": "npm run build && npm run start",
+    "docker:check": "docker images | grep -E 'python|node|frolvlad|temurin|golang|ruby|rust'",
+    "docker:cleanup": "docker system prune -af",
+    "docker:status": "docker system df"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "bcrypt": "^6.0.0",
+    "bullmq": "^5.65.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.0.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "typescript": "^5.9.3"
+  }
+}
