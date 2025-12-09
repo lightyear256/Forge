@@ -114,14 +114,10 @@ const io = new Server(httpServer, {
 });
 
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "http://13.126.199.238",
-    "http://forge.ayushmaan.tech",
-    "http://forge.api.ayushmaan.tech"
-  ],
+  origin: true,       // Reflects the incoming Origin
   credentials: true
 }));
+
 
 app.use(cookieParser());
 
