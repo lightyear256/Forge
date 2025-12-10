@@ -10,7 +10,7 @@
     "build": "tsc -b  ",
     "build:fast": "tsc -b",
     "start": "npm run pull-images && node ./dist/server.js",
-    "dev": "npm run build && npm run start",
+    "dev": "npm run redis && npm run build && npm run start",
     "docker:check": "docker images | grep -E 'python|node|frolvlad|temurin|golang|ruby|rust'",
     "docker:cleanup": "docker system prune -af",
     "docker:status": "docker system df"

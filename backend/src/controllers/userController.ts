@@ -129,3 +129,179 @@ export const profile = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+export const updateUserProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { name, email } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    // Validation
+    if (!name || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name and email are required'
+      });
+    }
+
+    if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format'
+      });
+    }
+
+    // Check if email is already taken by another user
+    const existingUser = await userModels.findOne({ 
+      email, 
+      _id: { $ne: userId } 
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already in use'
+      });
+    }
+
+    // Update user
+    const updatedUser = await userModels.findByIdAndUpdate(
+      userId,
+      { 
+        name: name.trim(), 
+        email: email.trim().toLowerCase() 
+      },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        createdAt: updatedUser.createdAt,
+        updatedAt: updatedUser.updatedAt
+      }
+    });
+  } catch (error: any) {
+    console.error('Update profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update profile',
+      error: error.message
+    });
+  }
+};
+
+// Get user stats (projects and files count)
+export const getUserStats = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    // Import Project model
+    const Project = (await import('../Models/projectModel.js')).default; // Adjust path
+
+    const projects = await Project.find({ userId });
+    
+    const totalProjects = projects.length;
+    const totalFiles = projects.reduce((acc, project) => 
+      acc + (project.files?.length || 0), 0
+    );
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        totalProjects,
+        totalFiles,
+        lastActive: new Date()
+      }
+    });
+  } catch (error: any) {
+    console.error('Get stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch stats',
+      error: error.message
+    });
+  }
+};
+
+// Delete user account
+export const deleteUserAccount = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { password } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    // Verify password before deletion
+    const user = await userModels.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check password (assuming you have a comparePassword method)
+    const isPasswordValid = await bcrypt.compare(user.password,password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid password'
+      });
+    }
+
+    // Delete all user's projects
+    const Project = (await import('../Models/projectModel.js')).default;
+    await Project.deleteMany({ userId });
+
+    // Delete user
+    await userModels.findByIdAndDelete(userId);
+
+    // Clear cookie if you're using JWT in cookies
+    res.clearCookie('token');
+
+    res.status(200).json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+  } catch (error: any) {
+    console.error('Delete account error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete account',
+      error: error.message
+    });
+  }
+};

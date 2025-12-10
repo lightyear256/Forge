@@ -109,11 +109,10 @@ export default function CodeEditor() {
 
   useEffect(() => {
     const newSocket = io(process.env.NEXT_PUBLIC_WS_URL || 'wss://forge.api.ayushmaan.tech', {
-  transports: ['websocket'],
-  reconnection: true,
-  withCredentials: true
-});
-
+      transports: ['websocket'],
+      reconnection: true,
+      withCredentials: true
+    });
     
     newSocket.on('connect', () => {
       setIsConnected(true);
@@ -424,9 +423,10 @@ export default function CodeEditor() {
         }}
       />
 
-      <div className="pt-20 h-screen bg-black text-gray-50 flex">
-        <div className="w-64 bg-black border-r border-slate-800 flex flex-col">
-          <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+      <div className="pt-16 md:pt-20 h-screen bg-black text-gray-50 flex flex-col md:flex-row overflow-hidden">
+        {/* Sidebar */}
+        <div className="w-full md:w-64 lg:w-72 bg-black border-b md:border-b-0 md:border-r border-slate-800 flex flex-col max-h-[40vh] md:max-h-none">
+          <div className="p-4 md:p-6 border-b border-slate-800 flex items-center justify-between">
             <h2 className="text-xs uppercase tracking-widest text-slate-500">Files</h2>
             <button
               onClick={() => router.push('/dashboard')}
@@ -563,52 +563,56 @@ export default function CodeEditor() {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col">
-          <div className="h-16 bg-black border-b border-slate-800 flex items-center justify-between px-6">
-            <div className="flex items-center gap-6">
-              <span className="text-sm text-slate-400 font-light">
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          {/* Top Bar */}
+          <div className="h-12 md:h-16 bg-black border-b border-slate-800 flex items-center justify-between px-4 md:px-6 gap-2 flex-shrink-0">
+            <div className="flex items-center gap-3 md:gap-6 min-w-0 flex-1">
+              <span className="text-xs md:text-sm text-slate-400 font-light truncate">
                 {currentFile ? currentFile.filename : 'No file selected'}
               </span>
               <div className="flex items-center gap-2">
                 <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-xs text-slate-600">
+                <span className="text-xs text-slate-600 hidden sm:inline">
                   {isConnected ? 'Connected' : 'Disconnected'}
                 </span>
               </div>
             </div>
             
-            <div className="flex gap-3">
+            <div className="flex gap-2 md:gap-3 flex-shrink-0">
               <button
                 onClick={saveCode}
                 disabled={isSaving || !currentFile}
-                className="flex items-center gap-2 px-5 py-2 border border-slate-700 hover:border-purple-500 hover:bg-purple-500/5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-slate-700 disabled:hover:bg-transparent transition-all text-sm"
+                className="flex items-center gap-1 md:gap-2 px-3 md:px-5 py-2 border border-slate-700 hover:border-purple-500 hover:bg-purple-500/5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-slate-700 disabled:hover:bg-transparent transition-all text-xs md:text-sm"
               >
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save
+                <span className="hidden sm:inline">Save</span>
               </button>
               {isRunning ? (
                 <button
                   onClick={stopExecution}
-                  className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 transition-colors text-sm"
+                  className="flex items-center gap-1 md:gap-2 px-3 md:px-5 py-2 bg-red-600 hover:bg-red-700 transition-colors text-xs md:text-sm"
                 >
                   <XCircle className="w-4 h-4" />
-                  Stop
+                  <span className="hidden sm:inline">Stop</span>
                 </button>
               ) : (
                 <button
                   onClick={runCode}
                   disabled={!isConnected || !currentFile || isRunningRef.current}
-                  className="flex items-center gap-2 px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-800 disabled:text-slate-600 transition-colors text-sm"
+                  className="flex items-center gap-1 md:gap-2 px-3 md:px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-800 disabled:text-slate-600 transition-colors text-xs md:text-sm"
                 >
                   <Play className="w-4 h-4" />
-                  Run
+                  <span className="hidden sm:inline">Run</span>
                 </button>
               )}
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 border-b border-slate-800">
+          {/* Editor and Terminal Container */}
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+            {/* Editor */}
+            <div className="flex-1 border-b border-slate-800 min-h-0 overflow-hidden">
               {currentFile ? (
                 <Editor
                   height="100%"
@@ -617,12 +621,13 @@ export default function CodeEditor() {
                   onChange={(value) => setCode(value || '')}
                   theme="vs-dark"
                   options={{
-                    minimap: { enabled: false },
-                    fontSize: 14,
+                    minimap: { enabled: window.innerWidth > 768 },
+                    fontSize: window.innerWidth < 768 ? 12 : 14,
                     lineNumbers: 'on',
                     scrollBeyondLastLine: false,
                     automaticLayout: true,
                     fontFamily: 'JetBrains Mono, Menlo, Monaco, Courier New, monospace',
+                    wordWrap: window.innerWidth < 768 ? 'on' : 'off',
                   }}
                   beforeMount={(monaco) => {
                     monaco.editor.defineTheme('custom-dark', {
@@ -639,7 +644,7 @@ export default function CodeEditor() {
                   }}
                 />
               ) : (
-                <div className="h-full flex items-center justify-center">
+                <div className="h-full flex items-center justify-center p-4">
                   <div className="text-center space-y-4">
                     <div className="w-16 h-16 mx-auto border-2 border-dashed border-slate-800 flex items-center justify-center">
                       <File className="w-8 h-8 text-slate-700" />
@@ -650,26 +655,30 @@ export default function CodeEditor() {
               )}
             </div>
 
-            <div style={{ height: `${terminalHeight}px` }} className="bg-black flex flex-col border-t border-slate-800">
+            {/* Terminal */}
+            <div 
+              style={{ height: window.innerWidth < 768 ? '200px' : `${terminalHeight}px` }} 
+              className="bg-black flex flex-col border-t border-slate-800 min-h-[150px] flex-shrink-0"
+            >
               <div 
                 onMouseDown={startResize}
-                className={`h-1 bg-slate-800 hover:bg-purple-500 cursor-ns-resize transition-colors ${isResizing ? 'bg-purple-500' : ''}`}
+                className={`h-1 bg-slate-800 hover:bg-purple-500 cursor-ns-resize transition-colors hidden md:block ${isResizing ? 'bg-purple-500' : ''}`}
               />
               
-              <div className="h-10 bg-black border-b border-slate-800 px-6 flex items-center gap-2">
+              <div className="h-10 bg-black border-b border-slate-800 px-4 md:px-6 flex items-center gap-2 flex-shrink-0">
                 <Terminal className="w-3 h-3 text-slate-600" />
                 <span className="text-xs text-slate-600 uppercase tracking-wider">Terminal</span>
               </div>
               
               <div
                 ref={terminalRef}
-                className="flex-1 p-6 font-mono text-xs overflow-y-auto"
+                className="flex-1 p-4 md:p-6 font-mono text-xs overflow-y-auto overflow-x-auto"
               >
                 {output.length === 0 ? (
                   <div className="text-slate-600">Ready to run...</div>
                 ) : (
                   output.map((item) => (
-                    <div key={item.id} className={`${getOutputColor(item.type)} whitespace-pre-wrap`}>
+                    <div key={item.id} className={`${getOutputColor(item.type)} whitespace-pre-wrap break-words`}>
                       {item.type === 'input' && '> '}
                       {item.text}
                     </div>
@@ -677,7 +686,7 @@ export default function CodeEditor() {
                 )}
               </div>
               
-              <div className="bg-black p-3 flex gap-3 border-t border-slate-800">
+              <div className="bg-black p-3 flex gap-2 md:gap-3 border-t border-slate-800 flex-shrink-0">
                 <input
                   ref={inputRef}
                   type="text"
@@ -686,12 +695,12 @@ export default function CodeEditor() {
                   onKeyPress={(e) => e.key === 'Enter' && sendInput()}
                   disabled={!isRunning}
                   placeholder={isRunning ? "Type input..." : "Run code first"}
-                  className="flex-1 px-0 py-2 bg-transparent border-b border-slate-800 focus:border-purple-500 focus:outline-none text-sm disabled:opacity-50 placeholder-slate-700"
+                  className="flex-1 px-0 py-2 bg-transparent border-b border-slate-800 focus:border-purple-500 focus:outline-none text-xs md:text-sm disabled:opacity-50 placeholder-slate-700 min-w-0"
                 />
                 <button
                   onClick={sendInput}
                   disabled={!isRunning || !currentInput.trim()}
-                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-800 disabled:text-slate-600 transition-colors text-sm"
+                  className="px-3 md:px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-800 disabled:text-slate-600 transition-colors text-xs md:text-sm flex-shrink-0"
                 >
                   Send
                 </button>
