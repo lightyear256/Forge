@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ayushmaan194/forge-frontend:frontend-image
+    image: ayushmaan194/forge-frontend:latest
     ports:
     - "3000:3000"
     environment:
