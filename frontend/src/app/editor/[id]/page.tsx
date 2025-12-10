@@ -108,10 +108,12 @@ export default function CodeEditor() {
   }, [projectId]);
 
   useEffect(() => {
-    const newSocket = io(process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:5000', {
-      transports: ['websocket'],
-      reconnection: true
-    });
+    const newSocket = io(process.env.NEXT_PUBLIC_WS_URL || 'wss://forge.api.ayushmaan.tech', {
+  transports: ['websocket'],
+  reconnection: true,
+  withCredentials: true
+});
+
     
     newSocket.on('connect', () => {
       setIsConnected(true);
