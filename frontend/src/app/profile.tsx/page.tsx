@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
 
 export default function Profile() {
-  const { user} = useAuth() as any;
+  const {user} = useAuth() as any;
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState("");
