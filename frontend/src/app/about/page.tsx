@@ -1,14 +1,17 @@
 "use client";
 import { useEffect, useState } from "react";
 import { 
+  Code2, 
   Container, 
   FolderGit2, 
   FileCode, 
   Shield, 
   Zap,
+  Terminal,
   Box,
   Lock
 } from "lucide-react";
+import Image from "next/image";
 
 export default function About() {
   const [mounted, setMounted] = useState(false);
@@ -54,7 +57,6 @@ export default function About() {
     <div className="pt-25 px-6 md:px-12 lg:px-20 min-h-screen w-full bg-black text-gray-50">
       <div className="max-w-7xl mx-auto space-y-24 py-12">
         
-        {/* Hero Section */}
         <div className="space-y-6">
           <div className="inline-flex items-center gap-2 px-4 py-2 border border-slate-800 rounded-full">
             <Box className="w-4 h-4 text-purple-500" />
@@ -73,7 +75,6 @@ export default function About() {
           </p>
         </div>
 
-        {/* Supported Languages */}
         <div className="space-y-8">
           <div className="border-b border-slate-800 pb-4">
             <h2 className="text-sm uppercase tracking-widest text-slate-500 mb-1">
@@ -84,18 +85,22 @@ export default function About() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-px bg-slate-800">
             {languages.map((lang, index) => {
+              const Icon = lang.logo;
               return (
                 <div
                   key={index}
                   className="bg-black p-6 hover:bg-slate-900/50 transition-colors group"
                 >
                   <div className="flex flex-col items-center gap-3 text-center">
-                    <div className="w-12 h-12 border border-slate-800 group-hover:border-purple-500 flex items-center justify-center transition-colors p-2">
-                      <img 
-                        src={lang.logo} 
-                        alt={lang.name}
-                        className="w-full h-full object-contain"
-                      />
+                    <div className="w-12 h-12 border border-slate-800 group-hover:border-purple-500 flex items-center justify-center transition-colors">
+                      <Image
+  src={lang.logo}
+  alt={lang.name}
+  width={24}
+  height={24}
+  className="text-slate-600 group-hover:text-purple-500 transition-colors"
+/>
+
                     </div>
                     <span className="text-sm text-slate-400 group-hover:text-slate-200 transition-colors">
                       {lang.name}
@@ -107,7 +112,6 @@ export default function About() {
           </div>
         </div>
 
-        {/* Features */}
         <div className="space-y-8">
           <div className="border-b border-slate-800 pb-4">
             <h2 className="text-sm uppercase tracking-widest text-slate-500 mb-1">
@@ -143,7 +147,6 @@ export default function About() {
           </div>
         </div>
 
-        {/* Limitations */}
         <div className="space-y-8">
           <div className="border-b border-slate-800 pb-4">
             <h2 className="text-sm uppercase tracking-widest text-slate-500 mb-1">
@@ -183,7 +186,6 @@ export default function About() {
           </div>
         </div>
 
-        {/* Technology Stack */}
         <div className="space-y-8 pb-12">
           <div className="border-b border-slate-800 pb-4">
             <h2 className="text-sm uppercase tracking-widest text-slate-500 mb-1">
