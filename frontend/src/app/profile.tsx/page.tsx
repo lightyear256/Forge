@@ -80,15 +80,6 @@ export default function Profile() {
     }
   };
 
-//   const handleLogout = async () => {
-//     try {
-//       await logout();
-//       toast.success("Logged out successfully");
-//       router.push("/");
-//     } catch (error) {
-//       toast.error("Failed to logout");
-//     }
-//   };
 
   const handleCancel = () => {
     setName(user?.name || "");
@@ -125,7 +116,6 @@ export default function Profile() {
 
       <div className="pt-20 md:pt-25 px-4 sm:px-6 md:px-12 lg:px-20 min-h-screen w-full bg-black text-gray-50">
         <div className="max-w-4xl mx-auto space-y-8 md:space-y-12">
-          {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-4 md:pb-6">
             <div className="flex items-center gap-3 md:gap-4">
               <button
@@ -144,16 +134,9 @@ export default function Profile() {
                 </p>
               </div>
             </div>
-            {/* <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-3 md:px-4 py-1.5 md:py-2 border border-slate-700 hover:border-red-500 hover:bg-red-500/5 transition-all text-xs md:text-sm"
-            >
-              <LogOut className="w-3 h-3 md:w-4 md:h-4" />
-              <span className="hidden sm:inline">Logout</span>
-            </button> */}
+            
           </div>
 
-          {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-slate-800">
             <div className="bg-black p-4 md:p-6 border-b sm:border-b-0 sm:border-r border-slate-800">
               <div className="flex items-center gap-3 mb-2">
@@ -189,7 +172,6 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Profile Information */}
           <div className="space-y-6 md:space-y-8">
             <div className="flex items-end justify-between border-b border-slate-800 pb-4">
               <h3 className="text-sm uppercase tracking-widest text-slate-500">
@@ -226,7 +208,6 @@ export default function Profile() {
             </div>
 
             <div className="space-y-px">
-              {/* Name Field */}
               <div className="border-b border-slate-800 p-4 md:p-6">
                 <div className="flex items-start gap-4 md:gap-6">
                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 flex items-center justify-center flex-shrink-0 mt-1">
@@ -253,7 +234,6 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* Email Field */}
               <div className="border-b border-slate-800 p-4 md:p-6">
                 <div className="flex items-start gap-4 md:gap-6">
                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 flex items-center justify-center flex-shrink-0 mt-1">
@@ -280,7 +260,6 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* User ID (Read-only) */}
               <div className="border-b border-slate-800 p-4 md:p-6">
                 <div className="flex items-start gap-4 md:gap-6">
                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 flex items-center justify-center flex-shrink-0 mt-1">
@@ -297,7 +276,6 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* Account Created */}
               <div className="p-4 md:p-6">
                 <div className="flex items-start gap-4 md:gap-6">
                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 flex items-center justify-center flex-shrink-0 mt-1">
@@ -322,7 +300,6 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Danger Zone */}
           <div className="space-y-4 md:space-y-6 pt-8 md:pt-12">
             <div className="border-b border-red-900/20 pb-4">
               <h3 className="text-sm uppercase tracking-widest text-red-500/70">

@@ -143,7 +143,6 @@ export const updateUserProfile = async (req: Request, res: Response) => {
       });
     }
 
-    // Validation
     if (!name || !email) {
       return res.status(400).json({
         success: false,
@@ -158,7 +157,6 @@ export const updateUserProfile = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if email is already taken by another user
     const existingUser = await userModels.findOne({ 
       email, 
       _id: { $ne: userId } 
@@ -171,7 +169,6 @@ export const updateUserProfile = async (req: Request, res: Response) => {
       });
     }
 
-    // Update user
     const updatedUser = await userModels.findByIdAndUpdate(
       userId,
       { 
@@ -209,7 +206,6 @@ export const updateUserProfile = async (req: Request, res: Response) => {
   }
 };
 
-// Get user stats (projects and files count)
 export const getUserStats = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -221,8 +217,7 @@ export const getUserStats = async (req: Request, res: Response) => {
       });
     }
 
-    // Import Project model
-    const Project = (await import('../Models/projectModel.js')).default; // Adjust path
+    const Project = (await import('../Models/projectModel.js')).default; 
 
     const projects = await Project.find({ userId });
     
@@ -249,7 +244,6 @@ export const getUserStats = async (req: Request, res: Response) => {
   }
 };
 
-// Delete user account
 export const deleteUserAccount = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -262,7 +256,6 @@ export const deleteUserAccount = async (req: Request, res: Response) => {
       });
     }
 
-    // Verify password before deletion
     const user = await userModels.findById(userId);
     
     if (!user) {
@@ -272,7 +265,6 @@ export const deleteUserAccount = async (req: Request, res: Response) => {
       });
     }
 
-    // Check password (assuming you have a comparePassword method)
     const isPasswordValid = await bcrypt.compare(user.password,password);
     
     if (!isPasswordValid) {
@@ -282,14 +274,11 @@ export const deleteUserAccount = async (req: Request, res: Response) => {
       });
     }
 
-    // Delete all user's projects
     const Project = (await import('../Models/projectModel.js')).default;
     await Project.deleteMany({ userId });
 
-    // Delete user
     await userModels.findByIdAndDelete(userId);
 
-    // Clear cookie if you're using JWT in cookies
     res.clearCookie('token');
 
     res.status(200).json({
