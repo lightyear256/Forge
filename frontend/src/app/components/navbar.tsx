@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react'
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { useAuth } from '../context/authContext'
+import axios from 'axios'
 
 const NavBar = () => {
   const { isAuthenticated, checkAuth } = useAuth()
@@ -38,13 +39,23 @@ const NavBar = () => {
     }
   }, [isMobileMenuOpen])
 
-  const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('role')
-    checkAuth()
-    setIsMobileMenuOpen(false)
-    router.replace("/")
+  const handleLogout = async () => {
+  try {
+    await axios.post(
+      `${process.env.NEXT_PUBLIC_API_URL}/user/logout`,
+      {},
+      { withCredentials: true }
+    );
+    
+    checkAuth();
+    setIsMobileMenuOpen(false);
+    router.replace("/");
+  } catch (error) {
+    console.error('Logout error:', error);
+    setIsMobileMenuOpen(false);
+    router.replace("/");
   }
+};
 
   const getNavItems = () => {
     if (!isAuthenticated) {
@@ -60,7 +71,6 @@ const NavBar = () => {
       return [
         { icon: Home, label: 'Dashboard', onClick: () => router.push('/dashboard') },
         { icon: User, label: 'Profile', onClick: () => router.push('/profile') },
-        { icon: CodeXml, label: 'Creators', onClick: () => router.push('/creators') },
         { icon: LogOut, label: 'Logout', onClick: handleLogout },
       ]
     }
