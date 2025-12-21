@@ -245,6 +245,7 @@ export const setupInteractiveWorker = async (io: any) => {
         const normalizedPath = normalizePathForDocker(tempFile);
         
         let command = config.command;
+        command = command.replace(/\/app\/main\.\w+/, `/app/${fileName}`);
         if (language.toLowerCase() === "java") {
           command = `javac /app/${fileName} -d /tmp && java -cp /tmp ${className}`;
         }
