@@ -123,7 +123,7 @@ services:
         max-file: "3"
 
   frontend:
-    image: ayushmaan194/forge-frontend:latest
+    image: ayushmaan194/forge-frontend:frontend-image
     container_name: forge-frontend
     pull_policy: if_not_present  # Prevents Docker Hub rate limit
     restart: unless-stopped
