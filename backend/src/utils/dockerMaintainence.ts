@@ -3,8 +3,6 @@ import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
-
-
 export const dockerMaintenance = {
   
   async getDiskUsage() {
@@ -23,24 +21,29 @@ export const dockerMaintenance = {
     try {
       console.log('Starting full Docker cleanup...');
       
+      // Stop execution containers
       await execAsync('docker ps -q --filter "name=exec-" | xargs -r docker stop', { timeout: 30000 }).catch(() => {});
       
+      // Remove execution containers
       await execAsync('docker ps -aq --filter "name=exec-" | xargs -r docker rm -f', { timeout: 30000 }).catch(() => {});
       
-      await execAsync('docker image prune -af --filter "until=24h"', { timeout: 30000 });
+      // FIXED: Remove only dangling images (untagged), NOT all unused images
+      // This preserves language runtime images (python, node, java, etc.)
+      await execAsync('docker image prune -f --filter "until=24h"', { timeout: 30000 });
       
+      // Clean old containers
       await execAsync('docker container prune -f --filter "until=1h"', { timeout: 30000 });
       
+      // Clean build cache
       await execAsync('docker builder prune -af --filter "until=48h"', { timeout: 30000 });
       
-      // await execAsync('docker volume prune -f', { timeout: 30000 });
-      
+      // Clean networks
       await execAsync('docker network prune -f', { timeout: 30000 });
       
-      console.log('Full Docker cleanup completed');
+      console.log('✅ Full Docker cleanup completed');
       return true;
     } catch (error) {
-      console.error('Full cleanup failed:', error);
+      console.error('❌ Full cleanup failed:', error);
       return false;
     }
   },
@@ -48,20 +51,27 @@ export const dockerMaintenance = {
   
   async emergencyCleanup() {
     try {
-      console.log('EMERGENCY CLEANUP INITIATED');
+      console.log('⚠️ EMERGENCY CLEANUP INITIATED');
       
+      // Kill execution containers
       await execAsync('docker kill $(docker ps -q --filter "name=exec-") 2>/dev/null || true', { timeout: 10000 });
       
+      // Remove execution containers
       await execAsync('docker rm -f $(docker ps -aq --filter "name=exec-") 2>/dev/null || true', { timeout: 10000 });
       
-      await execAsync('docker image prune -af', { timeout: 60000 });
+      // FIXED: Remove only dangling images, NOT all images
+      // This preserves language runtime images
+      await execAsync('docker image prune -f', { timeout: 60000 });
       
-      await execAsync('docker system prune -af --volumes', { timeout: 120000 });
+      // FIXED: Only prune containers and networks, NOT entire system
+      // This preserves language runtime images
+      await execAsync('docker container prune -f', { timeout: 60000 });
+      await execAsync('docker network prune -f', { timeout: 30000 });
       
-      console.log('Emergency cleanup completed');
+      console.log('✅ Emergency cleanup completed');
       return true;
     } catch (error) {
-      console.error('Emergency cleanup failed:', error);
+      console.error('❌ Emergency cleanup failed:', error);
       return false;
     }
   },
@@ -103,7 +113,7 @@ export const dockerMaintenance = {
       const { stdout: imageCount } = await execAsync('docker images -q | wc -l');
       const { stdout: volumeCount } = await execAsync('docker volume ls -q | wc -l');
       
-      console.log('Docker Stats:', {
+      console.log('📊 Docker Stats:', {
         runningContainers: containerCount.trim(),
         totalImages: imageCount.trim(),
         volumes: volumeCount.trim()
@@ -123,34 +133,35 @@ export const dockerMaintenance = {
   
   async restartDocker() {
     try {
-      console.log(' Attempting to restart Docker daemon...');
+      console.log('🔄 Attempting to restart Docker daemon...');
       await execAsync('systemctl restart docker', { timeout: 30000 });
-      console.log(' Docker daemon restarted');
+      console.log('✅ Docker daemon restarted');
       return true;
     } catch (error) {
-      console.error(' Failed to restart Docker (may need sudo):', error);
+      console.error('❌ Failed to restart Docker (may need sudo):', error);
       return false;
     }
   }
 };
 
-
 export const setupDockerMonitoring = () => {
+  // Monitor stats every 5 minutes
   setInterval(async () => {
     await dockerMaintenance.logStats();
     await dockerMaintenance.getDiskUsage();
   }, 300000);
 
+  // Check for stuck containers every 2 minutes
   setInterval(async () => {
     const stuck = await dockerMaintenance.getStuckContainers();
     if (stuck.total > 0) {
-      console.log(`Found ${stuck.total} stuck containers`);
+      console.log(`⚠️ Found ${stuck.total} stuck containers`);
       if (stuck.total > 10) {
-        console.log('Auto-cleaning stuck containers...');
+        console.log('🧹 Auto-cleaning stuck containers...');
         await dockerMaintenance.fullCleanup();
       }
     }
   }, 120000);
 
-  console.log('Docker monitoring enabled');
+  console.log('✅ Docker monitoring enabled');
 };

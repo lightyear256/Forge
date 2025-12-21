@@ -9,7 +9,7 @@
     "pull-images": "node ./dist/scripts/pull-docker-images.js",
     "build": "tsc -b  ",
     "build:fast": "tsc -b",
-    "start": "node ./dist/server.js",
+    "start": "npm run pull-images && node ./dist/server.js",
     "dev": "npm run redis && npm run build && npm run start",
     "docker:check": "docker images | grep -E 'python|node|frolvlad|temurin|golang|ruby|rust'",
     "docker:cleanup": "docker system prune -af",
