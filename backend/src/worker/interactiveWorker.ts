@@ -37,13 +37,13 @@ const normalizePathForDocker = (filePath: string): string => {
 const forceCleanupContainer = async (containerName: string, maxRetries: number = 3): Promise<boolean> => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(` Cleanup attempt ${attempt}/${maxRetries} for: ${containerName}`);
+      console.log(`🧹 Cleanup attempt ${attempt}/${maxRetries} for: ${containerName}`);
       
       try {
         await execAsync(`docker kill -s SIGKILL ${containerName}`, { timeout: 10000 });
-        console.log(` Sent SIGKILL to ${containerName}`);
+        console.log(`💀 Sent SIGKILL to ${containerName}`);
       } catch (e) {
-        console.log(` SIGKILL failed (container may be dead): ${containerName}`);
+        console.log(`⚠️ SIGKILL failed (container may be dead): ${containerName}`);
       }
       
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -51,7 +51,7 @@ const forceCleanupContainer = async (containerName: string, maxRetries: number =
       for (let rmAttempt = 1; rmAttempt <= 3; rmAttempt++) {
         try {
           await execAsync(`docker rm -f ${containerName}`, { timeout: 10000 });
-          console.log(`Removed ${containerName} on attempt ${rmAttempt}`);
+          console.log(`✅ Removed ${containerName} on attempt ${rmAttempt}`);
           break;
         } catch (e) {
           if (rmAttempt === 3) throw e;
@@ -63,17 +63,17 @@ const forceCleanupContainer = async (containerName: string, maxRetries: number =
       const exists = await containerExists(containerName);
       
       if (!exists) {
-        console.log(` Container ${containerName} successfully cleaned up`);
+        console.log(`✅ Container ${containerName} successfully cleaned up`);
         return true;
       } else {
-        console.log(` Container ${containerName} still exists after cleanup attempt ${attempt}`);
+        console.log(`⚠️ Container ${containerName} still exists after cleanup attempt ${attempt}`);
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
       
     } catch (error) {
-      console.error(` Cleanup attempt ${attempt} failed for ${containerName}:`, error);
+      console.error(`❌ Cleanup attempt ${attempt} failed for ${containerName}:`, error);
       if (attempt < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
@@ -82,7 +82,7 @@ const forceCleanupContainer = async (containerName: string, maxRetries: number =
   
   const stillExists = await containerExists(containerName);
   if (stillExists) {
-    console.error(` CRITICAL: Container ${containerName} still exists after ${maxRetries} attempts`);
+    console.error(`🚨 CRITICAL: Container ${containerName} still exists after ${maxRetries} attempts`);
     return false;
   }
   
@@ -108,7 +108,7 @@ const checkDiskSpace = async (): Promise<boolean> => {
     const usage = parseInt(stdout.trim());
     
     if (usage > 85) {
-      console.error(`Disk usage critical: ${usage}%`);
+      console.error(`💾 Disk usage critical: ${usage}%`);
       return false;
     }
     return true;
@@ -125,23 +125,35 @@ const checkDockerHealth = async (): Promise<boolean> => {
     return true;
   } catch (error) {
     dockerFailureCount++;
-    console.error(`Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`);
+    console.error(`❌ Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`);
     return false;
   }
 };
 
 const aggressiveDockerCleanup = async () => {
   try {
-    console.log(' Starting aggressive Docker cleanup...');
+    console.log('🧹 Starting Docker cleanup...');
     
-    await execAsync('docker image prune -af --filter "until=24h"', { timeout: 30000 });
+    // Stop and remove execution containers
+    await execAsync('docker ps -q --filter "name=exec-" | xargs -r docker stop', { timeout: 30000 }).catch(() => {});
+    await execAsync('docker ps -aq --filter "name=exec-" | xargs -r docker rm -f', { timeout: 30000 }).catch(() => {});
+    
+    // FIXED: Remove only dangling images (untagged), NOT all unused images
+    // This preserves language runtime images (python, node, java, etc.)
+    await execAsync('docker image prune -f --filter "until=24h"', { timeout: 30000 });
+    
+    // Clean old containers
     await execAsync('docker container prune -f --filter "until=1h"', { timeout: 30000 });
-    await execAsync('docker builder prune -af --filter "until=48h"', { timeout: 30000 });
-    await execAsync('docker volume prune -f', { timeout: 30000 });
     
-    console.log(' Docker cleanup completed');
+    // Clean build cache
+    await execAsync('docker builder prune -af --filter "until=48h"', { timeout: 30000 });
+    
+    // Clean networks
+    await execAsync('docker network prune -f', { timeout: 30000 });
+    
+    console.log('✅ Docker cleanup completed');
   } catch (error) {
-    console.error(' Docker cleanup failed:', error);
+    console.error('❌ Docker cleanup failed:', error);
   }
 };
 
@@ -159,7 +171,7 @@ const cleanupOrphanedFiles = async () => {
     const files = stdout.trim().split('\n').filter(f => f);
     
     if (files.length > 0) {
-      console.log(` Cleaning ${files.length} orphaned temp files`);
+      console.log(`🗑️ Cleaning ${files.length} orphaned temp files`);
       for (const file of files) {
         await unlink(file).catch(() => {});
       }
@@ -170,7 +182,7 @@ const cleanupOrphanedFiles = async () => {
 };
 
 export const setupInteractiveWorker = async (io: any) => {
-  console.log(' Initializing interactive worker...');
+  console.log('⚙️ Initializing interactive worker...');
   
   await cleanupOrphanedFiles();
   await aggressiveDockerCleanup();
@@ -189,7 +201,7 @@ export const setupInteractiveWorker = async (io: any) => {
       let tempFile = '';
       let docker: ChildProcess | null = null;
 
-      console.log(` Starting job ${jobId} for socket ${socketId}`);
+      console.log(`🚀 Starting job ${jobId} for socket ${socketId}`);
 
       try {
         if (dockerFailureCount >= MAX_DOCKER_FAILURES) {
@@ -252,7 +264,7 @@ export const setupInteractiveWorker = async (io: any) => {
           "sh", "-c", `timeout 32 ${command} || exit 124`  
         ];
 
-        console.log(` Spawning container: ${containerName}`);
+        console.log(`🐳 Spawning container: ${containerName}`);
         docker = spawn("docker", dockerCmd, {
           stdio: ['pipe', 'pipe', 'pipe'],
           detached: false
@@ -272,7 +284,7 @@ export const setupInteractiveWorker = async (io: any) => {
           if (isTerminated) return;
           isTerminated = true;
 
-          console.log(` Terminating job ${jobId}: ${reason}`);
+          console.log(`⛔ Terminating job ${jobId}: ${reason}`);
 
           if (timeoutHandle) {
             clearTimeout(timeoutHandle);
@@ -280,11 +292,11 @@ export const setupInteractiveWorker = async (io: any) => {
           }
 
           try {
-            console.log(` Killing container ${containerName}`);
+            console.log(`💀 Killing container ${containerName}`);
             const containerCleanedUp = await forceCleanupContainer(containerName);
             
             if (!containerCleanedUp) {
-              console.error(` Container ${containerName} cleanup incomplete`);
+              console.error(`⚠️ Container ${containerName} cleanup incomplete`);
             }
 
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -308,7 +320,7 @@ export const setupInteractiveWorker = async (io: any) => {
 
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (await containerExists(containerName)) {
-              console.error(` WARNING: Container ${containerName} still exists!`);
+              console.error(`⚠️ WARNING: Container ${containerName} still exists!`);
               await forceCleanupContainer(containerName, 2);
             }
             
@@ -334,7 +346,7 @@ export const setupInteractiveWorker = async (io: any) => {
         };
 
         docker.on("error", async (error) => {
-          console.error(`Docker spawn error for ${jobId}:`, error);
+          console.error(`❌ Docker spawn error for ${jobId}:`, error);
           dockerFailureCount++;
           if (isTerminated) return;
           await terminateExecution(`Execution error: ${error.message}`, -1);
@@ -388,7 +400,7 @@ export const setupInteractiveWorker = async (io: any) => {
           if (isTerminated) return;
           isTerminated = true;
 
-          console.log(` Job ${jobId} exited with code ${code}`);
+          console.log(`✅ Job ${jobId} exited with code ${code}`);
 
           if (timeoutHandle) {
             clearTimeout(timeoutHandle);
@@ -411,7 +423,7 @@ export const setupInteractiveWorker = async (io: any) => {
           await new Promise(resolve => setTimeout(resolve, 500));
           
           if (await containerExists(containerName)) {
-            console.log(` Container ${containerName} still exists after close, cleaning up...`);
+            console.log(`🧹 Container ${containerName} still exists after close, cleaning up...`);
             await forceCleanupContainer(containerName);
           }
           
@@ -434,13 +446,13 @@ export const setupInteractiveWorker = async (io: any) => {
 
         timeoutHandle = setTimeout(async () => {
           if (!isTerminated) {
-            console.log(` Timeout triggered for ${jobId}`);
+            console.log(`⏱️ Timeout triggered for ${jobId}`);
             await terminateExecution("Execution timeout (30 seconds max)", 124);
           }
         }, EXECUTION_TIMEOUT);
 
       } catch (error: any) {
-        console.error(`Job ${jobId} error:`, error);
+        console.error(`❌ Job ${jobId} error:`, error);
         
         if (containerName) {
           await forceCleanupContainer(containerName);
@@ -479,7 +491,7 @@ export const setupInteractiveWorker = async (io: any) => {
 );
 
   worker.on('failed', async (job, err) => {
-    console.error(` Job ${job?.id} failed:`, err);
+    console.error(`❌ Job ${job?.id} failed:`, err);
     
     if (job?.id) {
       const processInfo = activeProcesses.get(job.id as string);
@@ -491,7 +503,7 @@ export const setupInteractiveWorker = async (io: any) => {
   });
 
   worker.on('error', (err) => {
-    console.error(' Worker error:', err);
+    console.error('❌ Worker error:', err);
   });
 
   setInterval(async () => {
@@ -504,7 +516,7 @@ export const setupInteractiveWorker = async (io: any) => {
       const containers = stdout.trim().split('\n').filter(line => line);
       
       if (containers.length > 0) {
-        console.log(` Found ${containers.length} exec- containers`);
+        console.log(`🔍 Found ${containers.length} exec- containers`);
         
         for (const container of containers) {
           const [name, status] = container.split('\t');
@@ -513,7 +525,7 @@ export const setupInteractiveWorker = async (io: any) => {
             .some(p => p.containerId === name);
           
           if (!isTracked) {
-            console.log(` Cleaning orphaned container: ${name} (${status})`);
+            console.log(`🧹 Cleaning orphaned container: ${name} (${status})`);
             await forceCleanupContainer(name as string);
           }
         }
@@ -535,22 +547,22 @@ export const setupInteractiveWorker = async (io: any) => {
     const isHealthy = await checkDockerHealth();
     
     if (!isHealthy && dockerFailureCount >= MAX_DOCKER_FAILURES) {
-      console.error(' Docker is unhealthy! Pausing worker...');
+      console.error('🚨 Docker is unhealthy! Pausing worker...');
       await worker.pause();
       
       setTimeout(async () => {
         const recovered = await checkDockerHealth();
         if (recovered) {
-          console.log(' Docker recovered, resuming worker');
+          console.log('✅ Docker recovered, resuming worker');
           await worker.resume();
         } else {
-          console.error(' Docker still unhealthy, will retry...');
+          console.error('❌ Docker still unhealthy, will retry...');
         }
       }, 60000);
     }
   }, 30000);
 
-  console.log(' Interactive worker initialized and running');
+  console.log('✅ Interactive worker initialized and running');
 
   return { worker, activeProcesses };
 };
