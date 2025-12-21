@@ -11,45 +11,37 @@ const execAsync = promisify(exec);
 
 // Docker configuration for each language
 const getDockerConfig = (language: string) => {
-  const configs: Record<string, { image: string; command: string; pidsLimit: number }> = {
+  const configs: Record<string, { image: string; pidsLimit: number }> = {
     python: {
       image: 'python:3.11-alpine',
-      command: 'python3 /app/code.py',
       pidsLimit: 50
     },
     javascript: {
       image: 'node:18-alpine',
-      command: 'node /app/code.js',
       pidsLimit: 50
     },
     java: {
       image: 'openjdk:17-alpine',
-      command: 'javac /app/code.java && java -cp /app code',
       pidsLimit: 50
     },
     cpp: {
       image: 'gcc:12-alpine',
-      command: 'g++ /app/code.cpp -o /app/code && /app/code',
       pidsLimit: 50
     },
     c: {
       image: 'gcc:12-alpine',
-      command: 'gcc /app/code.c -o /app/code && /app/code',
       pidsLimit: 50
     },
     go: {
       image: 'golang:1.21-alpine',
-      command: 'go run /app/code.go',
       pidsLimit: 50
     },
     ruby: {
       image: 'ruby:3.2-alpine',
-      command: 'ruby /app/code.rb',
       pidsLimit: 50
     },
     rust: {
       image: 'rust:1.75-alpine',
-      command: 'rustc /app/code.rs -o /app/code && /app/code',
       pidsLimit: 50
     }
   };
@@ -73,7 +65,7 @@ const getFileExtension = (language: string): string => {
 
 const getJavaClassName = (code: string): string | null => {
   const match = code.match(/public\s+class\s+(\w+)/);
-  return match?.[1]?? null;
+  return match?.[1] ?? null;
 };
 
 const activeProcesses = new Map<string, { 
@@ -280,20 +272,33 @@ export const setupInteractiveWorker = async (io: any) => {
         
         const ext = getFileExtension(language);
         let fileName = `code.${ext}`;
-        let command = config.command;
+        let command: string;
         
-        // Special handling for Java
+        // Build command based on language
         if (language.toLowerCase() === "java") {
           const javaClassName = getJavaClassName(code);
           if (javaClassName) {
             fileName = `${javaClassName}.java`;
-            command = `javac /app/${fileName} -d /tmp && java -cp /tmp ${javaClassName}`;
+            command = `cd /app && javac ${fileName} && java ${javaClassName}`;
           } else {
             throw new Error("Could not find public class declaration in Java code");
           }
+        } else if (language.toLowerCase() === "python") {
+          command = `python3 /app/${fileName}`;
+        } else if (language.toLowerCase() === "javascript") {
+          command = `node /app/${fileName}`;
+        } else if (language.toLowerCase() === "cpp") {
+          command = `g++ /app/${fileName} -o /tmp/code && /tmp/code`;
+        } else if (language.toLowerCase() === "c") {
+          command = `gcc /app/${fileName} -o /tmp/code && /tmp/code`;
+        } else if (language.toLowerCase() === "go") {
+          command = `go run /app/${fileName}`;
+        } else if (language.toLowerCase() === "ruby") {
+          command = `ruby /app/${fileName}`;
+        } else if (language.toLowerCase() === "rust") {
+          command = `rustc /app/${fileName} -o /tmp/code && /tmp/code`;
         } else {
-          // For other languages, replace the filename in the command
-          command = command.replace(/code\.\w+/g, fileName);
+          throw new Error(`Unsupported language: ${language}`);
         }
         
         tempFile = join(tempDir, `${tempId}.${ext}`);
@@ -302,6 +307,8 @@ export const setupInteractiveWorker = async (io: any) => {
         const normalizedPath = normalizePathForDocker(tempFile);
         
         console.log(`📝 File: ${fileName}, Command: ${command}`);
+        console.log(`📂 Host path: ${tempFile}`);
+        console.log(`🐳 Container path: /app/${fileName}`);
         
         const dockerCmd = [
           "run", 
