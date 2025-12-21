@@ -118,7 +118,7 @@ const runDocker = async (
       command = `javac /app/${fileName} -d /tmp && java -cp /tmp ${className}`;
     }
 
-    const dockerCmd = `docker run --rm -i --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${tempFile}:/app/${fileName}:ro" ${config.image} sh -c "${command}"`;
+    const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${tempFile}:/app/${fileName}:ro" ${config.image} sh -c "${command}"`;
 
     return await new Promise<ExecutionResult>((resolve) => {
       const process = exec(

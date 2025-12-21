@@ -241,6 +241,7 @@ export const setupInteractiveWorker = async (io: any) => {
           "run", 
           "--rm",
           "-i",
+          "--pull=never",
           `--name=${containerName}`,
           "--network", "none",
           "--memory=512m",
