@@ -12,7 +12,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     python: {
       fileName: "main.py",
       image: "python:3.11-alpine",
-      command: "python3 -u /app/*.py",
+      command: "python3 -u /app/main.py",  // Changed from *.py to main.py
       pidsLimit: 50,
       memory: "128m",
       cpus: "0.5"
@@ -20,7 +20,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     javascript: {
       fileName: "main.js",
       image: "node:20-alpine",
-      command: "node /app/*.js",
+      command: "node /app/main.js",  // Changed from *.js to main.js
       pidsLimit: 50,
       memory: "128m",
       cpus: "0.5"
@@ -28,7 +28,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     cpp: {
       fileName: "main.cpp",
       image: "frolvlad/alpine-gxx",
-      command: "g++ -O2 -o /tmp/prog /app/*.cpp && /tmp/prog",
+      command: "g++ -O2 -o /tmp/prog /app/main.cpp && /tmp/prog",  // Changed from *.cpp
       pidsLimit: 100,
       memory: "256m",
       cpus: "0.5"
@@ -36,7 +36,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     c: {
       fileName: "main.c",
       image: "frolvlad/alpine-gxx",
-      command: "gcc -O2 -o /tmp/prog /app/*.c && /tmp/prog",
+      command: "gcc -O2 -o /tmp/prog /app/main.c && /tmp/prog",  // Changed from *.c
       pidsLimit: 100,
       memory: "256m",
       cpus: "0.5"
@@ -44,7 +44,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     java: {
       fileName: "Main.java",  
       image: "eclipse-temurin:17-alpine",
-      command: "javac /app/*.java -d /tmp && java -cp /tmp Main",  
+      command: "javac /app/Main.java -d /tmp && java -cp /tmp Main",  // Changed from *.java
       pidsLimit: 100,
       memory: "256m",
       cpus: "0.5"
@@ -52,7 +52,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     go: {
       fileName: "main.go",
       image: "golang:1.21-alpine",
-      command: "go run /app/*.go",
+      command: "go run /app/main.go",  // Changed from *.go
       pidsLimit: 200,
       memory: "256m",
       cpus: "0.5"
@@ -60,7 +60,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     ruby: {
       fileName: "main.rb",
       image: "ruby:3.2-alpine",
-      command: "ruby /app/*.rb",
+      command: "ruby /app/main.rb",  // Changed from *.rb
       pidsLimit: 50,
       memory: "128m",
       cpus: "0.5"
@@ -68,7 +68,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     rust: {
       fileName: "main.rs",
       image: "rust:alpine",
-      command: "rustc /app/*.rs -o /tmp/prog && /tmp/prog",
+      command: "rustc /app/main.rs -o /tmp/prog && /tmp/prog",  // Changed from *.rs
       pidsLimit: 150,
       memory: "256m",
       cpus: "0.5"
