@@ -6,9 +6,75 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { getDockerConfig, getFileExtension, getJavaClassName } from "../utils/dockerConfig.js";
 
 const execAsync = promisify(exec);
+
+// Docker configuration for each language
+const getDockerConfig = (language: string) => {
+  const configs: Record<string, { image: string; command: string; pidsLimit: number }> = {
+    python: {
+      image: 'python:3.11-alpine',
+      command: 'python3 /app/code.py',
+      pidsLimit: 50
+    },
+    javascript: {
+      image: 'node:18-alpine',
+      command: 'node /app/code.js',
+      pidsLimit: 50
+    },
+    java: {
+      image: 'openjdk:17-alpine',
+      command: 'javac /app/code.java && java -cp /app code',
+      pidsLimit: 50
+    },
+    cpp: {
+      image: 'gcc:12-alpine',
+      command: 'g++ /app/code.cpp -o /app/code && /app/code',
+      pidsLimit: 50
+    },
+    c: {
+      image: 'gcc:12-alpine',
+      command: 'gcc /app/code.c -o /app/code && /app/code',
+      pidsLimit: 50
+    },
+    go: {
+      image: 'golang:1.21-alpine',
+      command: 'go run /app/code.go',
+      pidsLimit: 50
+    },
+    ruby: {
+      image: 'ruby:3.2-alpine',
+      command: 'ruby /app/code.rb',
+      pidsLimit: 50
+    },
+    rust: {
+      image: 'rust:1.75-alpine',
+      command: 'rustc /app/code.rs -o /app/code && /app/code',
+      pidsLimit: 50
+    }
+  };
+
+  return configs[language.toLowerCase()];
+};
+
+const getFileExtension = (language: string): string => {
+  const extensions: Record<string, string> = {
+    python: 'py',
+    javascript: 'js',
+    java: 'java',
+    cpp: 'cpp',
+    c: 'c',
+    go: 'go',
+    ruby: 'rb',
+    rust: 'rs'
+  };
+  return extensions[language.toLowerCase()] || 'txt';
+};
+
+const getJavaClassName = (code: string): string | null => {
+  const match = code.match(/public\s+class\s+(\w+)/);
+  return match?.[1]?? null;
+};
 
 const activeProcesses = new Map<string, { 
   process: ChildProcess; 
@@ -32,7 +98,6 @@ const normalizePathForDocker = (filePath: string): string => {
   }
   return filePath;
 };
-
 
 const forceCleanupContainer = async (containerName: string, maxRetries: number = 3): Promise<boolean> => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -134,21 +199,12 @@ const aggressiveDockerCleanup = async () => {
   try {
     console.log('🧹 Starting Docker cleanup...');
     
-    // Stop and remove execution containers
     await execAsync('docker ps -q --filter "name=exec-" | xargs -r docker stop', { timeout: 30000 }).catch(() => {});
     await execAsync('docker ps -aq --filter "name=exec-" | xargs -r docker rm -f', { timeout: 30000 }).catch(() => {});
     
-    // FIXED: Remove only dangling images (untagged), NOT all unused images
-    // This preserves language runtime images (python, node, java, etc.)
     await execAsync('docker image prune -f --filter "until=24h"', { timeout: 30000 });
-    
-    // Clean old containers
     await execAsync('docker container prune -f --filter "until=1h"', { timeout: 30000 });
-    
-    // Clean build cache
     await execAsync('docker builder prune -af --filter "until=48h"', { timeout: 30000 });
-    
-    // Clean networks
     await execAsync('docker network prune -f', { timeout: 30000 });
     
     console.log('✅ Docker cleanup completed');
@@ -201,7 +257,7 @@ export const setupInteractiveWorker = async (io: any) => {
       let tempFile = '';
       let docker: ChildProcess | null = null;
 
-      console.log(`🚀 Starting job ${jobId} for socket ${socketId}`);
+      console.log(`🚀 Starting job ${jobId} for socket ${socketId} (${language})`);
 
       try {
         if (dockerFailureCount >= MAX_DOCKER_FAILURES) {
@@ -223,32 +279,29 @@ export const setupInteractiveWorker = async (io: any) => {
         containerName = `exec-${tempId}`;
         
         const ext = getFileExtension(language);
+        let fileName = `code.${ext}`;
+        let command = config.command;
         
-        let fileName = `${tempId}.${ext}`;
-        let actualFileName = fileName;
-        let className = tempId;
-        
+        // Special handling for Java
         if (language.toLowerCase() === "java") {
           const javaClassName = getJavaClassName(code);
           if (javaClassName) {
             fileName = `${javaClassName}.java`;
-            actualFileName = `${tempId}.java`;
-            className = javaClassName;
+            command = `javac /app/${fileName} -d /tmp && java -cp /tmp ${javaClassName}`;
           } else {
             throw new Error("Could not find public class declaration in Java code");
           }
+        } else {
+          // For other languages, replace the filename in the command
+          command = command.replace(/code\.\w+/g, fileName);
         }
         
-        tempFile = join(tempDir, actualFileName);
+        tempFile = join(tempDir, `${tempId}.${ext}`);
         await writeFile(tempFile, code, "utf8");
 
         const normalizedPath = normalizePathForDocker(tempFile);
         
-        let command = config.command;
-        command = command.replace(/\/app\/main\.\w+/, `/app/${fileName}`);
-        if (language.toLowerCase() === "java") {
-          command = `javac /app/${fileName} -d /tmp && java -cp /tmp ${className}`;
-        }
+        console.log(`📝 File: ${fileName}, Command: ${command}`);
         
         const dockerCmd = [
           "run", 
@@ -280,7 +333,6 @@ export const setupInteractiveWorker = async (io: any) => {
 
         io.to(socketId).emit("execution-started", { jobId });
 
-       
         const terminateExecution = async (reason: string, exitCode: number = -1) => {
           if (isTerminated) return;
           isTerminated = true;
@@ -479,17 +531,17 @@ export const setupInteractiveWorker = async (io: any) => {
       return { success: true };
     },
     { 
-    connection: { 
-      host: process.env.REDIS_HOST ?? "redis",
-      port: parseInt(process.env.REDIS_PORT || "6379")
-    },
-    concurrency: 3,
-    limiter: {
-      max: 10,
-      duration: 60000
+      connection: { 
+        host: process.env.REDIS_HOST ?? "redis",
+        port: parseInt(process.env.REDIS_PORT || "6379")
+      },
+      concurrency: 3,
+      limiter: {
+        max: 10,
+        duration: 60000
+      }
     }
-  }
-);
+  );
 
   worker.on('failed', async (job, err) => {
     console.error(`❌ Job ${job?.id} failed:`, err);
