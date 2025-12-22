@@ -271,7 +271,8 @@ export const setupInteractiveWorker = async (io: any) => {
         containerName = `exec-${tempId}`;
         
         const ext = getFileExtension(language);
-        let fileName = `${filename}.${ext}`;
+        const baseFilename = filename.replace(/\.[^/.]+$/, '');
+        let fileName = `${baseFilename}.${ext}`;
         let command: string;
         
         // Build command based on language

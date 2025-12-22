@@ -89,9 +89,10 @@ const runDocker = async (
   const tempDir = tmpdir();
   const ext = getFileExtension(language);
   
-  let fileName = `${filename}.${ext}`;
-  let actualFileName = fileName;
-  let className = tempId;
+ const baseFilename = filename ? filename.replace(/\.[^/.]+$/, '') : tempId;
+let fileName = `${baseFilename}.${ext}`;
+let actualFileName = `${tempId}.${ext}`;
+let className = tempId;
   
   if (language.toLowerCase() === "java") {
     const javaClassName = getJavaClassName(code);
