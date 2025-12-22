@@ -23,7 +23,7 @@ const checkDiskSpace = async (): Promise<boolean> => {
     const usage = parseInt(stdout.trim());
     
     if (usage > 85) {
-      console.error(` Disk usage critical: ${usage}%`);
+      console.error(`💾 Disk usage critical: ${usage}%`);
       return false;
     }
     return true;
@@ -40,7 +40,7 @@ const checkDockerHealth = async (): Promise<boolean> => {
     return true;
   } catch (error) {
     dockerFailureCount++;
-    console.error(`Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`);
+    console.error(`❌ Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`);
     return false;
   }
 };
@@ -89,16 +89,21 @@ const runDocker = async (
   const tempDir = tmpdir();
   const ext = getFileExtension(language);
   
- const baseFilename = filename ? filename.replace(/\.[^/.]+$/, '') : tempId;
-let fileName = `${baseFilename}.${ext}`;
-let actualFileName = `${tempId}.${ext}`;
-let className = tempId;
+  // CRITICAL FIX: Normalize filename to use correct extension
+  let containerFileName: string;
+  if (filename) {
+    const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+    containerFileName = `${nameWithoutExt}.${ext}`;
+  } else {
+    containerFileName = `main.${ext}`;
+  }
+  
+  let className = tempId;
   
   if (language.toLowerCase() === "java") {
     const javaClassName = getJavaClassName(code);
     if (javaClassName) {
-      fileName = `${javaClassName}.java`;
-      actualFileName = `${tempId}.java`;
+      containerFileName = `${javaClassName}.java`;
       className = javaClassName;
     } else {
       return {
@@ -109,38 +114,42 @@ let className = tempId;
     }
   }
   
-  const tempFile = join(tempDir, actualFileName);
+  const tempFile = join(tempDir, `${tempId}.${ext}`);
 
   try {
     await writeFile(tempFile, code, "utf8");
 
-    // let command = config.command;
     let command: string;
 
-if (language.toLowerCase() === "java") {
-  command = `javac /app/${fileName} -d /tmp && java -cp /tmp ${className}`;
-} else if (language.toLowerCase() === "python") {
-  command = `python3 -u /app/${fileName}`;
-} else if (language.toLowerCase() === "javascript") {
-  command = `node /app/${fileName}`;
-} else if (language.toLowerCase() === "cpp") {
-  command = `g++ -O2 /app/${fileName} -o /tmp/code && /tmp/code`;
-} else if (language.toLowerCase() === "c") {
-  command = `gcc -O2 /app/${fileName} -o /tmp/code && /tmp/code`;
-} else if (language.toLowerCase() === "go") {
-  command = `go run /app/${fileName}`;
-} else if (language.toLowerCase() === "ruby") {
-  command = `ruby /app/${fileName}`;
-} else if (language.toLowerCase() === "rust") {
-  command = `rustc /app/${fileName} -o /tmp/code && /tmp/code`;
-} else {
-  return {
-    stdout: "",
-    stderr: `Unsupported language: ${language}`,
-    error: "Unsupported language"
-  };
-}
-    const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${tempFile}:/app/${fileName}:ro" ${config.image} sh -c "${command}"`;
+    if (language.toLowerCase() === "java") {
+      command = `javac /app/${containerFileName} -d /tmp && java -cp /tmp ${className}`;
+    } else if (language.toLowerCase() === "python") {
+      command = `python3 -u /app/${containerFileName}`;
+    } else if (language.toLowerCase() === "javascript") {
+      command = `node /app/${containerFileName}`;
+    } else if (language.toLowerCase() === "cpp") {
+      command = `g++ -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
+    } else if (language.toLowerCase() === "c") {
+      command = `gcc -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
+    } else if (language.toLowerCase() === "go") {
+      command = `go run /app/${containerFileName}`;
+    } else if (language.toLowerCase() === "ruby") {
+      command = `ruby /app/${containerFileName}`;
+    } else if (language.toLowerCase() === "rust") {
+      command = `rustc /app/${containerFileName} -o /tmp/code && /tmp/code`;
+    } else {
+      return {
+        stdout: "",
+        stderr: `Unsupported language: ${language}`,
+        error: "Unsupported language"
+      };
+    }
+
+    console.log(`📝 Running: ${language}`);
+    console.log(`📂 File: ${containerFileName}`);
+    console.log(`🔧 Command: ${command}`);
+
+    const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${tempFile}:/app/${containerFileName}:ro" ${config.image} sh -c "${command}"`;
 
     return await new Promise<ExecutionResult>((resolve) => {
       const process = exec(
