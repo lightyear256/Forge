@@ -154,10 +154,12 @@ const runDocker = async (
     await writeFile(tempFile, code, "utf8");
 
     console.log(`📝 Running: ${language}`);
-    console.log(`📂 File: ${actualFileName}`);
-    console.log(`🔧 Command: ${command}`);
-    console.log(`📂 Host path: ${tempFile}`);
-    console.log(`🐳 Container path: /app/${containerFileName}`);
+    console.log(`📂 Requested filename: ${filename}`);
+    console.log(`📂 Actual filename to write: ${actualFileName}`);
+    console.log(`🔧 Container command: ${command}`);
+    console.log(`📂 Host temp dir: ${tempDirPath}`);
+    console.log(`📂 Host full file path: ${tempFile}`);
+    console.log(`🐳 Container will run at: /app/${containerFileName}`);
 
     // Build docker command with a directory bind-mount (more reliable on Windows)
     // Mount the whole temp directory as /app (read-only)
@@ -165,7 +167,8 @@ const runDocker = async (
     const hostMountPath = tempDirPath.replace(/\\/g, '/');
     const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${hostMountPath}:/app:ro" ${config.image} sh -c "${command}"`;
 
-    console.log(`🐳 Docker command: ${dockerCmd}`);
+    console.log(`\n🐳 DOCKER MOUNT: "${hostMountPath}" → /app`);
+    console.log(`🐳 FULL DOCKER COMMAND:\n${dockerCmd}\n`);
 
     return await new Promise<ExecutionResult>((resolve) => {
       const process = exec(
