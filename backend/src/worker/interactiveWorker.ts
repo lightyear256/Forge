@@ -273,50 +273,66 @@ export const setupInteractiveWorker = async (io: any) => {
         
         const ext = getFileExtension(language);
         
-        // CRITICAL FIX: Always use the user's filename for the container mount
-        // This ensures the file appears with the correct name inside the container
-        let containerFileName = filename || `main.${ext}`;
+        // CRITICAL FIX: Determine the actual filename to use
+        let actualFileName: string;
+        let containerFileName: string;
         let command: string;
         
-        // Build command based on language - use the actual filename
+        // For Java, we MUST use the class name
         if (language.toLowerCase() === "java") {
           const javaClassName = getJavaClassName(code);
           if (javaClassName) {
-            containerFileName = `${javaClassName}.java`;
+            actualFileName = `${javaClassName}.java`;
+            containerFileName = actualFileName;
             command = `cd /app && javac ${containerFileName} && java ${javaClassName}`;
           } else {
             throw new Error("Could not find public class declaration in Java code");
           }
-        } else if (language.toLowerCase() === "python") {
-          // CRITICAL: Use direct script execution, NOT -m flag
-          command = `python3 -u /app/${containerFileName}`;
-        } else if (language.toLowerCase() === "javascript") {
-          command = `node /app/${containerFileName}`;
-        } else if (language.toLowerCase() === "cpp") {
-          command = `g++ -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
-        } else if (language.toLowerCase() === "c") {
-          command = `gcc -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
-        } else if (language.toLowerCase() === "go") {
-          command = `go run /app/${containerFileName}`;
-        } else if (language.toLowerCase() === "ruby") {
-          command = `ruby /app/${containerFileName}`;
-        } else if (language.toLowerCase() === "rust") {
-          command = `rustc /app/${containerFileName} -o /tmp/code && /tmp/code`;
         } else {
-          throw new Error(`Unsupported language: ${language}`);
+          // For other languages, use provided filename or default to main.*
+          if (filename) {
+            // Remove any existing extension and add the correct one
+            const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+            actualFileName = `${nameWithoutExt}.${ext}`;
+          } else {
+            actualFileName = `main.${ext}`;
+          }
+          containerFileName = actualFileName;
+          
+          // Build language-specific commands
+          if (language.toLowerCase() === "python") {
+            command = `python3 -u /app/${containerFileName}`;
+          } else if (language.toLowerCase() === "javascript") {
+            command = `node /app/${containerFileName}`;
+          } else if (language.toLowerCase() === "cpp") {
+            command = `g++ -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
+          } else if (language.toLowerCase() === "c") {
+            command = `gcc -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
+          } else if (language.toLowerCase() === "go") {
+            command = `go run /app/${containerFileName}`;
+          } else if (language.toLowerCase() === "ruby") {
+            command = `ruby /app/${containerFileName}`;
+          } else if (language.toLowerCase() === "rust") {
+            command = `rustc /app/${containerFileName} -o /tmp/code && /tmp/code`;
+          } else {
+            throw new Error(`Unsupported language: ${language}`);
+          }
         }
         
-        // Create temp file on host with unique name
-        tempFile = join(tempDir, `${tempId}.${ext}`);
+        // Create temp file on host with the SAME name we'll use in container
+        // This is critical - the file must exist with this name
+        tempFile = join(tempDir, `${tempId}_${actualFileName}`);
         await writeFile(tempFile, code, "utf8");
 
         const normalizedPath = normalizePathForDocker(tempFile);
         
+        console.log(`📝 Actual filename: ${actualFileName}`);
         console.log(`📝 Container file: ${containerFileName}`);
         console.log(`🔧 Command: ${command}`);
         console.log(`📂 Host path: ${tempFile}`);
         console.log(`🐳 Container path: /app/${containerFileName}`);
         
+        // Mount the actual host file to the container path
         const dockerCmd = [
           "run", 
           "--rm",
@@ -327,7 +343,7 @@ export const setupInteractiveWorker = async (io: any) => {
           "--memory=512m",
           "--cpus=1.0",
           `--pids-limit=${config.pidsLimit}`,
-          // Mount the host file to the container with the user's filename
+          // This mounts: /tmp/abc123_hello.py -> /app/hello.py
           `-v`, `${normalizedPath}:/app/${containerFileName}:ro`,
           config.image,
           "sh", "-c", `timeout 32 ${command} || exit 124`  

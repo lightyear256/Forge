@@ -89,22 +89,20 @@ const runDocker = async (
   const tempDir = tmpdir();
   const ext = getFileExtension(language);
   
-  // CRITICAL FIX: Normalize filename to use correct extension
+  // CRITICAL FIX: Determine actual filename to use
+  let actualFileName: string;
   let containerFileName: string;
-  if (filename) {
-    const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
-    containerFileName = `${nameWithoutExt}.${ext}`;
-  } else {
-    containerFileName = `main.${ext}`;
-  }
-  
   let className = tempId;
+  let command: string;
   
+  // For Java, we MUST use the class name
   if (language.toLowerCase() === "java") {
     const javaClassName = getJavaClassName(code);
     if (javaClassName) {
-      containerFileName = `${javaClassName}.java`;
+      actualFileName = `${javaClassName}.java`;
+      containerFileName = actualFileName;
       className = javaClassName;
+      command = `javac /app/${containerFileName} -d /tmp && java -cp /tmp ${className}`;
     } else {
       return {
         stdout: "",
@@ -112,18 +110,19 @@ const runDocker = async (
         error: "Invalid Java code"
       };
     }
-  }
-  
-  const tempFile = join(tempDir, `${tempId}.${ext}`);
-
-  try {
-    await writeFile(tempFile, code, "utf8");
-
-    let command: string;
-
-    if (language.toLowerCase() === "java") {
-      command = `javac /app/${containerFileName} -d /tmp && java -cp /tmp ${className}`;
-    } else if (language.toLowerCase() === "python") {
+  } else {
+    // For other languages, use provided filename or default
+    if (filename) {
+      // Remove any existing extension and add the correct one
+      const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+      actualFileName = `${nameWithoutExt}.${ext}`;
+    } else {
+      actualFileName = `main.${ext}`;
+    }
+    containerFileName = actualFileName;
+    
+    // Build language-specific commands
+    if (language.toLowerCase() === "python") {
       command = `python3 -u /app/${containerFileName}`;
     } else if (language.toLowerCase() === "javascript") {
       command = `node /app/${containerFileName}`;
@@ -144,12 +143,24 @@ const runDocker = async (
         error: "Unsupported language"
       };
     }
+  }
+  
+  // Create temp file with the SAME name we'll use in container
+  const tempFile = join(tempDir, `${tempId}_${actualFileName}`);
+
+  try {
+    await writeFile(tempFile, code, "utf8");
 
     console.log(`📝 Running: ${language}`);
-    console.log(`📂 File: ${containerFileName}`);
+    console.log(`📂 File: ${actualFileName}`);
     console.log(`🔧 Command: ${command}`);
+    console.log(`📂 Host path: ${tempFile}`);
+    console.log(`🐳 Container path: /app/${containerFileName}`);
 
+    // Build docker command with proper volume mount
     const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${tempFile}:/app/${containerFileName}:ro" ${config.image} sh -c "${command}"`;
+
+    console.log(`🐳 Docker command: ${dockerCmd}`);
 
     return await new Promise<ExecutionResult>((resolve) => {
       const process = exec(
