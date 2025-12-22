@@ -326,9 +326,9 @@ export const setupInteractiveWorker = async (io: any) => {
         console.log(`📝 Container file: ${containerFileName}`);
         console.log(`🔧 Command: ${command}`);
         
-        // Build docker command that creates the file from stdin
-        // Use sh to write the code to the file, then run the command
-        const setupAndRun = `cat > /app/${containerFileName} && ${command}`;
+        // Build docker command that creates the file from stdin, then runs with timeout
+        // mkdir creates /app, cat reads from stdin until EOF, then the command runs with timeout
+        const setupAndRun = `mkdir -p /app && cat > /app/${containerFileName} && timeout 32 ${command}`;
         
         const dockerCmd = [
           "run", 
@@ -341,7 +341,7 @@ export const setupInteractiveWorker = async (io: any) => {
           "--cpus=1.0",
           `--pids-limit=${config.pidsLimit}`,
           config.image,
-          "sh", "-c", `timeout 32 ${setupAndRun} || exit 124`  
+          "sh", "-c", `${setupAndRun} || exit 124`  
         ];
 
         console.log(`🐳 Docker command: docker ${dockerCmd.join(' ')}`);
