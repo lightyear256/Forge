@@ -238,7 +238,7 @@ export const setupInteractiveWorker = async (io: any) => {
   const worker = new Worker(
     "interactiveQueue",
     async (job) => {
-      const { code, language, socketId } = job.data;
+      const { code, language, socketId, filename } = job.data;
       const jobId = job.id as string;
 
       let outputSize = 0;
@@ -271,7 +271,7 @@ export const setupInteractiveWorker = async (io: any) => {
         containerName = `exec-${tempId}`;
         
         const ext = getFileExtension(language);
-        let fileName = `code.${ext}`;
+        let fileName = `${filename}.${ext}`;
         let command: string;
         
         // Build command based on language
