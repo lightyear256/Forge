@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { spawn, ChildProcess } from "child_process";
-import { writeFile, unlink, mkdir, rm } from "fs/promises";
+import { unlink } from "fs/promises";
 import { randomBytes } from "crypto";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -246,8 +246,6 @@ export const setupInteractiveWorker = async (io: any) => {
       let isTerminated = false;
       let timeoutHandle: NodeJS.Timeout | null = null;
       let containerName = '';
-      let tempFile = '';
-      let tempDirPath = '';
       let docker: ChildProcess | null = null;
 
       console.log(`🚀 Starting job ${jobId} for socket ${socketId} (${language})`);
@@ -320,23 +318,18 @@ export const setupInteractiveWorker = async (io: any) => {
           }
         }
         
-        // Create temp directory and file inside it
-        // This is more reliable than mounting a single file
-        const tempDirPath = join(tempDir, tempId);
-        const tempFile = join(tempDirPath, actualFileName);
-        await mkdir(tempDirPath, { recursive: true });
-        await writeFile(tempFile, code, "utf8");
-
-        const normalizedPath = normalizePathForDocker(tempDirPath);
+        // Use stdin to pass code into container (avoids mount issues in Docker-in-Docker)
+        // const tempId = randomBytes(16).toString("hex");
+        containerName = `exec-${tempId}`;
         
         console.log(`📝 Actual filename: ${actualFileName}`);
         console.log(`📝 Container file: ${containerFileName}`);
         console.log(`🔧 Command: ${command}`);
-        console.log(`📂 Host temp dir: ${tempDirPath}`);
-        console.log(`📂 Host full file path: ${tempFile}`);
-        console.log(`🐳 Container path: /app/${containerFileName}`);
         
-        // Mount the entire temp directory as /app (not just a single file)
+        // Build docker command that creates the file from stdin
+        // Use sh to write the code to the file, then run the command
+        const setupAndRun = `cat > /app/${containerFileName} && ${command}`;
+        
         const dockerCmd = [
           "run", 
           "--rm",
@@ -347,10 +340,8 @@ export const setupInteractiveWorker = async (io: any) => {
           "--memory=512m",
           "--cpus=1.0",
           `--pids-limit=${config.pidsLimit}`,
-          // Mount the temp directory (more reliable than single file)
-          `-v`, `${normalizedPath}:/app:ro`,
           config.image,
-          "sh", "-c", `timeout 32 ${command} || exit 124`  
+          "sh", "-c", `timeout 32 ${setupAndRun} || exit 124`  
         ];
 
         console.log(`🐳 Docker command: docker ${dockerCmd.join(' ')}`);
@@ -364,11 +355,18 @@ export const setupInteractiveWorker = async (io: any) => {
         activeProcesses.set(jobId, { 
           process: docker, 
           containerId: containerName,
-          tempFile,
+          tempFile: '',
           socketId
         });
 
         io.to(socketId).emit("execution-started", { jobId });
+
+        // Write the code to stdin immediately (this creates the file in the container)
+        if (docker.stdin) {
+          docker.stdin.write(code);
+          docker.stdin.end();
+          console.log(`✍️ Code written to stdin for container ${containerName}`);
+        }
 
         const terminateExecution = async (reason: string, exitCode: number = -1) => {
           if (isTerminated) return;
@@ -420,16 +418,6 @@ export const setupInteractiveWorker = async (io: any) => {
 
           activeProcesses.delete(jobId);
           
-          setTimeout(async () => {
-            try {
-              if (tempDirPath) {
-                await rm(tempDirPath, { recursive: true, force: true });
-              } else if (tempFile) {
-                await unlink(tempFile);
-              }
-            } catch (e) {}
-          }, 2000);
-
           io.to(socketId).emit("output", {
             type: "error",
             data: `\n[${reason}]`
@@ -521,16 +509,6 @@ export const setupInteractiveWorker = async (io: any) => {
             await forceCleanupContainer(containerName);
           }
           
-          setTimeout(async () => {
-            try {
-              if (tempDirPath) {
-                await rm(tempDirPath, { recursive: true, force: true });
-              } else if (tempFile) {
-                await unlink(tempFile);
-              }
-            } catch (e) {}
-          }, 2000);
-          
           if (code === 124) {
             io.to(socketId).emit("output", {
               type: "error",
@@ -554,20 +532,6 @@ export const setupInteractiveWorker = async (io: any) => {
         
         if (containerName) {
           await forceCleanupContainer(containerName);
-        }
-        
-        if (tempDirPath) {
-          setTimeout(async () => {
-            try {
-              await rm(tempDirPath, { recursive: true, force: true });
-            } catch (e) {}
-          }, 2000);
-        } else if (tempFile) {
-          setTimeout(async () => {
-            try {
-              await unlink(tempFile);
-            } catch (e) {}
-          }, 2000);
         }
         
         io.to(socketId).emit("output", {
