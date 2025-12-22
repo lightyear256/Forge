@@ -17,19 +17,19 @@ const getDockerConfig = (language: string) => {
       pidsLimit: 50
     },
     javascript: {
-      image: 'node:18-alpine',
+      image: 'node:20-alpine',
       pidsLimit: 50
     },
     java: {
-      image: 'openjdk:17-alpine',
+      image: 'eclipse-temurin:17-alpine',
       pidsLimit: 50
     },
     cpp: {
-      image: 'gcc:12-alpine',
+      image: 'frolvlad/alpine-gxx',
       pidsLimit: 50
     },
     c: {
-      image: 'gcc:12-alpine',
+      image: 'frolvlad/alpine-gxx',
       pidsLimit: 50
     },
     go: {
@@ -41,7 +41,7 @@ const getDockerConfig = (language: string) => {
       pidsLimit: 50
     },
     rust: {
-      image: 'rust:1.75-alpine',
+      image: 'rust:alpine',
       pidsLimit: 50
     }
   };
@@ -250,6 +250,7 @@ export const setupInteractiveWorker = async (io: any) => {
       let docker: ChildProcess | null = null;
 
       console.log(`🚀 Starting job ${jobId} for socket ${socketId} (${language})`);
+      console.log(`📄 Original filename: ${filename}`);
 
       try {
         if (dockerFailureCount >= MAX_DOCKER_FAILURES) {
@@ -271,45 +272,50 @@ export const setupInteractiveWorker = async (io: any) => {
         containerName = `exec-${tempId}`;
         
         const ext = getFileExtension(language);
-        const baseFilename = filename.replace(/\.[^/.]+$/, '');
-        let fileName = `${baseFilename}.${ext}`;
+        
+        // CRITICAL FIX: Always use the user's filename for the container mount
+        // This ensures the file appears with the correct name inside the container
+        let containerFileName = filename || `main.${ext}`;
         let command: string;
         
-        // Build command based on language
+        // Build command based on language - use the actual filename
         if (language.toLowerCase() === "java") {
           const javaClassName = getJavaClassName(code);
           if (javaClassName) {
-            fileName = `${javaClassName}.java`;
-            command = `cd /app && javac ${fileName} && java ${javaClassName}`;
+            containerFileName = `${javaClassName}.java`;
+            command = `cd /app && javac ${containerFileName} && java ${javaClassName}`;
           } else {
             throw new Error("Could not find public class declaration in Java code");
           }
         } else if (language.toLowerCase() === "python") {
-          command = `python3 /app/${fileName}`;
+          // CRITICAL: Use direct script execution, NOT -m flag
+          command = `python3 -u /app/${containerFileName}`;
         } else if (language.toLowerCase() === "javascript") {
-          command = `node /app/${fileName}`;
+          command = `node /app/${containerFileName}`;
         } else if (language.toLowerCase() === "cpp") {
-          command = `g++ /app/${fileName} -o /tmp/code && /tmp/code`;
+          command = `g++ -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
         } else if (language.toLowerCase() === "c") {
-          command = `gcc /app/${fileName} -o /tmp/code && /tmp/code`;
+          command = `gcc -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
         } else if (language.toLowerCase() === "go") {
-          command = `go run /app/${fileName}`;
+          command = `go run /app/${containerFileName}`;
         } else if (language.toLowerCase() === "ruby") {
-          command = `ruby /app/${fileName}`;
+          command = `ruby /app/${containerFileName}`;
         } else if (language.toLowerCase() === "rust") {
-          command = `rustc /app/${fileName} -o /tmp/code && /tmp/code`;
+          command = `rustc /app/${containerFileName} -o /tmp/code && /tmp/code`;
         } else {
           throw new Error(`Unsupported language: ${language}`);
         }
         
+        // Create temp file on host with unique name
         tempFile = join(tempDir, `${tempId}.${ext}`);
         await writeFile(tempFile, code, "utf8");
 
         const normalizedPath = normalizePathForDocker(tempFile);
         
-        console.log(`📝 File: ${fileName}, Command: ${command}`);
+        console.log(`📝 Container file: ${containerFileName}`);
+        console.log(`🔧 Command: ${command}`);
         console.log(`📂 Host path: ${tempFile}`);
-        console.log(`🐳 Container path: /app/${fileName}`);
+        console.log(`🐳 Container path: /app/${containerFileName}`);
         
         const dockerCmd = [
           "run", 
@@ -321,12 +327,15 @@ export const setupInteractiveWorker = async (io: any) => {
           "--memory=512m",
           "--cpus=1.0",
           `--pids-limit=${config.pidsLimit}`,
-          `-v`, `${normalizedPath}:/app/${fileName}:ro`,
+          // Mount the host file to the container with the user's filename
+          `-v`, `${normalizedPath}:/app/${containerFileName}:ro`,
           config.image,
           "sh", "-c", `timeout 32 ${command} || exit 124`  
         ];
 
+        console.log(`🐳 Docker command: docker ${dockerCmd.join(' ')}`);
         console.log(`🐳 Spawning container: ${containerName}`);
+        
         docker = spawn("docker", dockerCmd, {
           stdio: ['pipe', 'pipe', 'pipe'],
           detached: false
