@@ -49,7 +49,7 @@ export const testExecution = async (req: Request, res: Response) => {
 
   const inputString = inputs?.join("\n") || "";
 
-  const result = await runDocker(language, file.code, inputString);
+  const result = await runDocker(language, file.code, inputString,filename);
 
   return res.json({
     success: true,

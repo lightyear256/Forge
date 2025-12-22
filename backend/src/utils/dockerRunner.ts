@@ -48,7 +48,8 @@ const checkDockerHealth = async (): Promise<boolean> => {
 const runDocker = async (
   language: string,
   code: string,
-  input?: string
+  input?: string,
+  filename?: string
 ): Promise<ExecutionResult> => {
   if (dockerFailureCount >= MAX_DOCKER_FAILURES) {
     return {
@@ -88,7 +89,7 @@ const runDocker = async (
   const tempDir = tmpdir();
   const ext = getFileExtension(language);
   
-  let fileName = `${tempId}.${ext}`;
+  let fileName = `${filename}.${ext}`;
   let actualFileName = fileName;
   let className = tempId;
   
