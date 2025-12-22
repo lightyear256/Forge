@@ -114,12 +114,32 @@ let className = tempId;
   try {
     await writeFile(tempFile, code, "utf8");
 
-    let command = config.command;
-    
-    if (language.toLowerCase() === "java") {
-      command = `javac /app/${fileName} -d /tmp && java -cp /tmp ${className}`;
-    }
+    // let command = config.command;
+    let command: string;
 
+if (language.toLowerCase() === "java") {
+  command = `javac /app/${fileName} -d /tmp && java -cp /tmp ${className}`;
+} else if (language.toLowerCase() === "python") {
+  command = `python3 -u /app/${fileName}`;
+} else if (language.toLowerCase() === "javascript") {
+  command = `node /app/${fileName}`;
+} else if (language.toLowerCase() === "cpp") {
+  command = `g++ -O2 /app/${fileName} -o /tmp/code && /tmp/code`;
+} else if (language.toLowerCase() === "c") {
+  command = `gcc -O2 /app/${fileName} -o /tmp/code && /tmp/code`;
+} else if (language.toLowerCase() === "go") {
+  command = `go run /app/${fileName}`;
+} else if (language.toLowerCase() === "ruby") {
+  command = `ruby /app/${fileName}`;
+} else if (language.toLowerCase() === "rust") {
+  command = `rustc /app/${fileName} -o /tmp/code && /tmp/code`;
+} else {
+  return {
+    stdout: "",
+    stderr: `Unsupported language: ${language}`,
+    error: "Unsupported language"
+  };
+}
     const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${tempFile}:/app/${fileName}:ro" ${config.image} sh -c "${command}"`;
 
     return await new Promise<ExecutionResult>((resolve) => {
