@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { spawn, ChildProcess } from "child_process";
-import { writeFile, unlink } from "fs/promises";
+import { writeFile, unlink, mkdir, rm } from "fs/promises";
 import { randomBytes } from "crypto";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -247,6 +247,7 @@ export const setupInteractiveWorker = async (io: any) => {
       let timeoutHandle: NodeJS.Timeout | null = null;
       let containerName = '';
       let tempFile = '';
+      let tempDirPath = '';
       let docker: ChildProcess | null = null;
 
       console.log(`🚀 Starting job ${jobId} for socket ${socketId} (${language})`);
@@ -319,20 +320,23 @@ export const setupInteractiveWorker = async (io: any) => {
           }
         }
         
-        // Create temp file on host with the SAME name we'll use in container
-        // This is critical - the file must exist with this name
-        tempFile = join(tempDir, `${tempId}_${actualFileName}`);
+        // Create temp directory and file inside it
+        // This is more reliable than mounting a single file
+        const tempDirPath = join(tempDir, tempId);
+        const tempFile = join(tempDirPath, actualFileName);
+        await mkdir(tempDirPath, { recursive: true });
         await writeFile(tempFile, code, "utf8");
 
-        const normalizedPath = normalizePathForDocker(tempFile);
+        const normalizedPath = normalizePathForDocker(tempDirPath);
         
         console.log(`📝 Actual filename: ${actualFileName}`);
         console.log(`📝 Container file: ${containerFileName}`);
         console.log(`🔧 Command: ${command}`);
-        console.log(`📂 Host path: ${tempFile}`);
+        console.log(`📂 Host temp dir: ${tempDirPath}`);
+        console.log(`📂 Host full file path: ${tempFile}`);
         console.log(`🐳 Container path: /app/${containerFileName}`);
         
-        // Mount the actual host file to the container path
+        // Mount the entire temp directory as /app (not just a single file)
         const dockerCmd = [
           "run", 
           "--rm",
@@ -343,8 +347,8 @@ export const setupInteractiveWorker = async (io: any) => {
           "--memory=512m",
           "--cpus=1.0",
           `--pids-limit=${config.pidsLimit}`,
-          // This mounts: /tmp/abc123_hello.py -> /app/hello.py
-          `-v`, `${normalizedPath}:/app/${containerFileName}:ro`,
+          // Mount the temp directory (more reliable than single file)
+          `-v`, `${normalizedPath}:/app:ro`,
           config.image,
           "sh", "-c", `timeout 32 ${command} || exit 124`  
         ];
@@ -418,7 +422,11 @@ export const setupInteractiveWorker = async (io: any) => {
           
           setTimeout(async () => {
             try {
-              await unlink(tempFile);
+              if (tempDirPath) {
+                await rm(tempDirPath, { recursive: true, force: true });
+              } else if (tempFile) {
+                await unlink(tempFile);
+              }
             } catch (e) {}
           }, 2000);
 
@@ -515,7 +523,11 @@ export const setupInteractiveWorker = async (io: any) => {
           
           setTimeout(async () => {
             try {
-              await unlink(tempFile);
+              if (tempDirPath) {
+                await rm(tempDirPath, { recursive: true, force: true });
+              } else if (tempFile) {
+                await unlink(tempFile);
+              }
             } catch (e) {}
           }, 2000);
           
@@ -544,7 +556,13 @@ export const setupInteractiveWorker = async (io: any) => {
           await forceCleanupContainer(containerName);
         }
         
-        if (tempFile) {
+        if (tempDirPath) {
+          setTimeout(async () => {
+            try {
+              await rm(tempDirPath, { recursive: true, force: true });
+            } catch (e) {}
+          }, 2000);
+        } else if (tempFile) {
           setTimeout(async () => {
             try {
               await unlink(tempFile);
