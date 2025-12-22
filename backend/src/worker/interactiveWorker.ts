@@ -83,10 +83,10 @@ let dockerFailureCount = 0;
 const MAX_DOCKER_FAILURES = 5;
 
 const normalizePathForDocker = (filePath: string): string => {
+  // For Docker Desktop on Windows, convert backslashes to forward slashes
+  // but keep the drive letter (C:/path/to/file format)
   if (process.platform === 'win32') {
-    return filePath
-      .replace(/\\/g, '/')
-      .replace(/^([A-Z]):/, (_, drive) => `/${drive.toLowerCase()}`);
+    return filePath.replace(/\\/g, '/');
   }
   return filePath;
 };
