@@ -31,7 +31,8 @@ export const startInteractive = async (req: Request, res: Response) => {
   const job = await interactiveQueue.add("startInteractive", {
     code: file.code,
     language,
-    socketId
+    socketId,
+    filename
   });
 
   return res.json({
