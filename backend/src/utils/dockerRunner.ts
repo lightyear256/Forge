@@ -1,5 +1,5 @@
 import { exec } from "child_process";
-import { writeFile, unlink } from "fs/promises";
+import { writeFile, unlink, mkdir, rm } from "fs/promises";
 import { randomBytes } from "crypto";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -146,9 +146,11 @@ const runDocker = async (
   }
   
   // Create temp file with the SAME name we'll use in container
-  const tempFile = join(tempDir, `${tempId}_${actualFileName}`);
+  const tempDirPath = join(tempDir, `${tempId}`);
+  const tempFile = join(tempDirPath, actualFileName);
 
   try {
+    await mkdir(tempDirPath, { recursive: true });
     await writeFile(tempFile, code, "utf8");
 
     console.log(`📝 Running: ${language}`);
@@ -157,8 +159,11 @@ const runDocker = async (
     console.log(`📂 Host path: ${tempFile}`);
     console.log(`🐳 Container path: /app/${containerFileName}`);
 
-    // Build docker command with proper volume mount
-    const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${tempFile}:/app/${containerFileName}:ro" ${config.image} sh -c "${command}"`;
+    // Build docker command with a directory bind-mount (more reliable on Windows)
+    // Mount the whole temp directory as /app (read-only)
+    // Convert Windows backslashes to forward slashes for Docker compatibility
+    const hostMountPath = tempDirPath.replace(/\\/g, '/');
+    const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} -v "${hostMountPath}:/app:ro" ${config.image} sh -c "${command}"`;
 
     console.log(`🐳 Docker command: ${dockerCmd}`);
 
@@ -170,7 +175,9 @@ const runDocker = async (
           maxBuffer: 1024 * 1024,
         },
         (error, stdout, stderr) => {
+          // Clean up temp file and directory
           unlink(tempFile).catch(() => {});
+          rm(tempDirPath, { recursive: true, force: true }).catch(() => {});
 
           if (error) {
             if (error.message.includes('docker') || error.message.includes('Docker')) {
@@ -209,6 +216,9 @@ const runDocker = async (
   } catch (err: any) {
     if (tempFile) {
       await unlink(tempFile).catch(() => {});
+    }
+    if (tempDirPath) {
+      await rm(tempDirPath, { recursive: true, force: true }).catch(() => {});
     }
     return {
       stdout: "",
