@@ -155,7 +155,7 @@ export const setupInteractiveWorker = async (io: any) => {
           const javaClassName = getJavaClassName(code);
           if (javaClassName) {
             actualFileName = `${javaClassName}.java`;
-            command = `cd /app && javac ${actualFileName} && java ${javaClassName}`;
+            command = `javac /app/${actualFileName} -d /tmp && java -cp /tmp ${javaClassName}`;
           } else {
             throw new Error("Could not find public class declaration in Java code");
           }

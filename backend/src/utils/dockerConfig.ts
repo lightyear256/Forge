@@ -46,9 +46,9 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
     java: {
       fileName: "Main.java",
       image: "eclipse-temurin:17-alpine",
-      command: "javac /app/Main.java -d /tmp && java -cp /tmp Main",
+      command: "javac /app/Main.java -d /tmp && java -cp /tmp Main",  
       pidsLimit: 50,
-      memory: "150m",  // Java needs more
+      memory: "150m",
       cpus: "0.4"
     },
     go: {
