@@ -73,11 +73,24 @@ const checkDiskSpace = async (): Promise<boolean> => {
   try {
     const { stdout } = await execAsync("df -h /var/lib/docker | tail -1 | awk '{print $5}' | sed 's/%//'");
     const usage = parseInt(stdout.trim());
-    console.log("usage :",usage);
-    return usage <= 85;
-  } catch (error) {
-    console.log(error);
+    
+    // CRITICAL: Handle NaN case
+    if (isNaN(usage)) {
+      console.error('⚠️ Failed to parse disk usage, failing open');
+      return true; // Fail open if we can't parse
+    }
+    
+    console.log(`💾 Disk usage: ${usage}%`);
+    
+    if (usage > 85) {
+      console.error(`💾 Disk usage critical: ${usage}%`);
+      return false;
+    }
+    
     return true;
+  } catch (error) {
+    console.error('⚠️ Disk check error:', error);
+    return true; // Fail open on error
   }
 };
 
