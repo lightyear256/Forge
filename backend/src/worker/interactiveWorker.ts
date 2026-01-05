@@ -73,8 +73,10 @@ const checkDiskSpace = async (): Promise<boolean> => {
   try {
     const { stdout } = await execAsync("df -h /var/lib/docker | tail -1 | awk '{print $5}' | sed 's/%//'");
     const usage = parseInt(stdout.trim());
+    console.log("usage :",usage);
     return usage <= 85;
   } catch (error) {
+    console.log(error);
     return true;
   }
 };
