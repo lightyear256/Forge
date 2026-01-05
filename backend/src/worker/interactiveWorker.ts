@@ -1,94 +1,38 @@
 import { Worker } from "bullmq";
 import { spawn, ChildProcess } from "child_process";
-import { unlink } from "fs/promises";
 import { randomBytes } from "crypto";
-import { join } from "path";
-import { tmpdir } from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { getDockerConfig, getFileExtension, getJavaClassName } from "../utils/dockerConfig.js";
 
 const execAsync = promisify(exec);
-
-// Docker configuration for each language
-const getDockerConfig = (language: string) => {
-  const configs: Record<string, { image: string; pidsLimit: number }> = {
-    python: {
-      image: 'python:3.11-alpine',
-      pidsLimit: 50
-    },
-    javascript: {
-      image: 'node:20-alpine',
-      pidsLimit: 50
-    },
-    java: {
-      image: 'eclipse-temurin:17-alpine',
-      pidsLimit: 50
-    },
-    cpp: {
-      image: 'frolvlad/alpine-gxx',
-      pidsLimit: 50
-    },
-    c: {
-      image: 'frolvlad/alpine-gxx',
-      pidsLimit: 50
-    },
-    go: {
-      image: 'golang:1.21-alpine',
-      pidsLimit: 50
-    },
-    ruby: {
-      image: 'ruby:3.2-alpine',
-      pidsLimit: 50
-    },
-    rust: {
-      image: 'rust:alpine',
-      pidsLimit: 50
-    }
-  };
-
-  return configs[language.toLowerCase()];
-};
-
-const getFileExtension = (language: string): string => {
-  const extensions: Record<string, string> = {
-    python: 'py',
-    javascript: 'js',
-    java: 'java',
-    cpp: 'cpp',
-    c: 'c',
-    go: 'go',
-    ruby: 'rb',
-    rust: 'rs'
-  };
-  return extensions[language.toLowerCase()] || 'txt';
-};
-
-const getJavaClassName = (code: string): string | null => {
-  const match = code.match(/public\s+class\s+(\w+)/);
-  return match?.[1] ?? null;
-};
 
 const activeProcesses = new Map<string, { 
   process: ChildProcess; 
   containerId: string;
-  tempFile: string;
   socketId: string;
 }>();
 
-const MAX_OUTPUT_SIZE = 1024 * 1024;
-const MAX_OUTPUT_LINES = 10000;
+const MAX_OUTPUT_SIZE = 512 * 1024; // Reduced from 1MB
+const MAX_OUTPUT_LINES = 5000;      // Reduced from 10000
 const EXECUTION_TIMEOUT = 30000;
 
 let dockerFailureCount = 0;
 const MAX_DOCKER_FAILURES = 5;
 
-const normalizePathForDocker = (filePath: string): string => {
-  // For Docker Desktop on Windows, convert backslashes to forward slashes
-  // but keep the drive letter (C:/path/to/file format)
-  if (process.platform === 'win32') {
-    return filePath.replace(/\\/g, '/');
+const checkSystemMemory = async (): Promise<boolean> => {
+  try {
+    const { stdout } = await execAsync("free -m | grep Mem | awk '{print ($3/$2) * 100.0}'");
+    const memoryUsagePercent = parseFloat(stdout.trim());
+    
+    if (memoryUsagePercent > 75) {
+      console.error(`💾 Memory usage critical: ${memoryUsagePercent.toFixed(1)}%`);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    return true;
   }
-  return filePath;
 };
 
 const forceCleanupContainer = async (containerName: string, maxRetries: number = 3): Promise<boolean> => {
@@ -98,79 +42,39 @@ const forceCleanupContainer = async (containerName: string, maxRetries: number =
       
       try {
         await execAsync(`docker kill -s SIGKILL ${containerName}`, { timeout: 10000 });
-        console.log(`💀 Sent SIGKILL to ${containerName}`);
-      } catch (e) {
-        console.log(`⚠️ SIGKILL failed (container may be dead): ${containerName}`);
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      for (let rmAttempt = 1; rmAttempt <= 3; rmAttempt++) {
-        try {
-          await execAsync(`docker rm -f ${containerName}`, { timeout: 10000 });
-          console.log(`✅ Removed ${containerName} on attempt ${rmAttempt}`);
-          break;
-        } catch (e) {
-          if (rmAttempt === 3) throw e;
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
+      } catch (e) {}
       
       await new Promise(resolve => setTimeout(resolve, 1000));
-      const exists = await containerExists(containerName);
       
-      if (!exists) {
+      await execAsync(`docker rm -f ${containerName}`, { timeout: 10000 });
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const { stdout } = await execAsync(
+        `docker ps -a --filter "name=^${containerName}$" --format "{{.Names}}"`, 
+        { timeout: 5000 }
+      );
+      
+      if (stdout.trim() !== containerName) {
         console.log(`✅ Container ${containerName} successfully cleaned up`);
         return true;
-      } else {
-        console.log(`⚠️ Container ${containerName} still exists after cleanup attempt ${attempt}`);
-        if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
       }
-      
     } catch (error) {
-      console.error(`❌ Cleanup attempt ${attempt} failed for ${containerName}:`, error);
-      if (attempt < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      if (attempt === maxRetries) {
+        console.error(`❌ Failed to cleanup ${containerName}`);
+        return false;
       }
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
-  
-  const stillExists = await containerExists(containerName);
-  if (stillExists) {
-    console.error(`🚨 CRITICAL: Container ${containerName} still exists after ${maxRetries} attempts`);
-    return false;
-  }
-  
-  return true;
-};
-
-const containerExists = async (containerName: string): Promise<boolean> => {
-  try {
-    const { stdout } = await execAsync(
-      `docker ps -a --filter "name=^${containerName}$" --format "{{.Names}}"`, 
-      { timeout: 5000 }
-    );
-    const exists = stdout.trim() === containerName;
-    return exists;
-  } catch (error) {
-    return false;
-  }
+  return false;
 };
 
 const checkDiskSpace = async (): Promise<boolean> => {
   try {
     const { stdout } = await execAsync("df -h /var/lib/docker | tail -1 | awk '{print $5}' | sed 's/%//'");
     const usage = parseInt(stdout.trim());
-    
-    if (usage > 85) {
-      console.error(`💾 Disk usage critical: ${usage}%`);
-      return false;
-    }
-    return true;
+    return usage <= 85;
   } catch (error) {
-    console.error('Failed to check disk space:', error);
     return true;
   }
 };
@@ -182,58 +86,12 @@ const checkDockerHealth = async (): Promise<boolean> => {
     return true;
   } catch (error) {
     dockerFailureCount++;
-    console.error(`❌ Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`);
     return false;
   }
 };
 
-const aggressiveDockerCleanup = async () => {
-  try {
-    console.log('🧹 Starting Docker cleanup...');
-    
-    await execAsync('docker ps -q --filter "name=exec-" | xargs -r docker stop', { timeout: 30000 }).catch(() => {});
-    await execAsync('docker ps -aq --filter "name=exec-" | xargs -r docker rm -f', { timeout: 30000 }).catch(() => {});
-    
-    await execAsync('docker image prune -f --filter "until=24h"', { timeout: 30000 });
-    await execAsync('docker container prune -f --filter "until=1h"', { timeout: 30000 });
-    await execAsync('docker builder prune -af --filter "until=48h"', { timeout: 30000 });
-    await execAsync('docker network prune -f', { timeout: 30000 });
-    
-    console.log('✅ Docker cleanup completed');
-  } catch (error) {
-    console.error('❌ Docker cleanup failed:', error);
-  }
-};
-
-const cleanupOrphanedFiles = async () => {
-  try {
-    const tempDir = tmpdir();
-    const extensions = ['py', 'js', 'java', 'cpp', 'c', 'go', 'rb', 'rs'];
-    const findPattern = extensions.map(ext => `-name "*.${ext}"`).join(' -o ');
-    
-    const { stdout } = await execAsync(
-      `find ${tempDir} \\( ${findPattern} \\) -mmin +60 2>/dev/null || true`,
-      { timeout: 10000 }
-    );
-    
-    const files = stdout.trim().split('\n').filter(f => f);
-    
-    if (files.length > 0) {
-      console.log(`🗑️ Cleaning ${files.length} orphaned temp files`);
-      for (const file of files) {
-        await unlink(file).catch(() => {});
-      }
-    }
-  } catch (error) {
-    console.error('Temp cleanup error:', error);
-  }
-};
-
 export const setupInteractiveWorker = async (io: any) => {
-  console.log('⚙️ Initializing interactive worker...');
-  
-  await cleanupOrphanedFiles();
-  await aggressiveDockerCleanup();
+  console.log('⚙️ Initializing interactive worker for t3.micro...');
   
   const worker = new Worker(
     "interactiveQueue",
@@ -248,17 +106,21 @@ export const setupInteractiveWorker = async (io: any) => {
       let containerName = '';
       let docker: ChildProcess | null = null;
 
-      console.log(`🚀 Starting job ${jobId} for socket ${socketId} (${language})`);
-      console.log(`📄 Original filename: ${filename}`);
+      console.log(`🚀 Starting job ${jobId} (${language})`);
 
       try {
         if (dockerFailureCount >= MAX_DOCKER_FAILURES) {
-          throw new Error("Code execution service temporarily unavailable. Please try again in a few minutes.");
+          throw new Error("Code execution service temporarily unavailable");
+        }
+        
+        const hasMemory = await checkSystemMemory();
+        if (!hasMemory) {
+          throw new Error("Server memory capacity exceeded. Please try again in a moment.");
         }
         
         const hasSpace = await checkDiskSpace();
         if (!hasSpace) {
-          throw new Error("Server capacity exceeded. Please try again in a few minutes.");
+          throw new Error("Server capacity exceeded");
         }
 
         const config = getDockerConfig(language);
@@ -267,69 +129,51 @@ export const setupInteractiveWorker = async (io: any) => {
         }
 
         const tempId = randomBytes(16).toString("hex");
-        const tempDir = tmpdir();
         containerName = `exec-${tempId}`;
         
         const ext = getFileExtension(language);
         
-        // CRITICAL FIX: Determine the actual filename to use
         let actualFileName: string;
-        let containerFileName: string;
         let command: string;
         
-        // For Java, we MUST use the class name
         if (language.toLowerCase() === "java") {
           const javaClassName = getJavaClassName(code);
           if (javaClassName) {
             actualFileName = `${javaClassName}.java`;
-            containerFileName = actualFileName;
-            command = `cd /app && javac ${containerFileName} && java ${javaClassName}`;
+            command = `cd /app && javac ${actualFileName} && java ${javaClassName}`;
           } else {
             throw new Error("Could not find public class declaration in Java code");
           }
         } else {
-          // For other languages, use provided filename or default to main.*
           if (filename) {
-            // Remove any existing extension and add the correct one
             const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
             actualFileName = `${nameWithoutExt}.${ext}`;
           } else {
             actualFileName = `main.${ext}`;
           }
-          containerFileName = actualFileName;
           
-          // Build language-specific commands
           if (language.toLowerCase() === "python") {
-            command = `python3 -u /app/${containerFileName}`;
+            command = `python3 -u /app/${actualFileName}`;
           } else if (language.toLowerCase() === "javascript") {
-            command = `node /app/${containerFileName}`;
+            command = `node /app/${actualFileName}`;
           } else if (language.toLowerCase() === "cpp") {
-            command = `g++ -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
+            command = `g++ -O2 /app/${actualFileName} -o /tmp/code && /tmp/code`;
           } else if (language.toLowerCase() === "c") {
-            command = `gcc -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
+            command = `gcc -O2 /app/${actualFileName} -o /tmp/code && /tmp/code`;
           } else if (language.toLowerCase() === "go") {
-            command = `go run /app/${containerFileName}`;
+            command = `go run /app/${actualFileName}`;
           } else if (language.toLowerCase() === "ruby") {
-            command = `ruby /app/${containerFileName}`;
+            command = `ruby /app/${actualFileName}`;
           } else if (language.toLowerCase() === "rust") {
-            command = `rustc /app/${containerFileName} -o /tmp/code && /tmp/code`;
+            command = `rustc /app/${actualFileName} -o /tmp/code && /tmp/code`;
           } else {
             throw new Error(`Unsupported language: ${language}`);
           }
         }
         
-        // Use stdin to pass code into container (avoids mount issues in Docker-in-Docker)
-        // const tempId = randomBytes(16).toString("hex");
-        containerName = `exec-${tempId}`;
+        const setupAndRun = `mkdir -p /app && cat > /app/${actualFileName} && timeout 32 ${command}`;
         
-        console.log(`📝 Actual filename: ${actualFileName}`);
-        console.log(`📝 Container file: ${containerFileName}`);
-        console.log(`🔧 Command: ${command}`);
-        
-        // Build docker command that creates the file from stdin, then runs with timeout
-        // mkdir creates /app, cat reads from stdin until EOF, then the command runs with timeout
-        const setupAndRun = `mkdir -p /app && cat > /app/${containerFileName} && timeout 32 ${command}`;
-        
+        // CRITICAL: Strict resource limits for t3.micro
         const dockerCmd = [
           "run", 
           "--rm",
@@ -337,15 +181,16 @@ export const setupInteractiveWorker = async (io: any) => {
           "--pull=never",
           `--name=${containerName}`,
           "--network", "none",
-          "--memory=512m",
-          "--cpus=1.0",
+          `--memory=${config.memory}`,
+          `--memory-swap=${config.memory}`, // No extra swap
+          `--cpus=${config.cpus}`,
           `--pids-limit=${config.pidsLimit}`,
+          "--ulimit", "nofile=100:100",
           config.image,
-          "sh", "-c", `${setupAndRun} || exit 124`  
+          "sh", "-c", `${setupAndRun} || exit 124`
         ];
 
-        console.log(`🐳 Docker command: docker ${dockerCmd.join(' ')}`);
-        console.log(`🐳 Spawning container: ${containerName}`);
+        console.log(`🐳 Spawning: ${containerName} (mem: ${config.memory}, cpu: ${config.cpus})`);
         
         docker = spawn("docker", dockerCmd, {
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -355,65 +200,35 @@ export const setupInteractiveWorker = async (io: any) => {
         activeProcesses.set(jobId, { 
           process: docker, 
           containerId: containerName,
-          tempFile: '',
           socketId
         });
 
         io.to(socketId).emit("execution-started", { jobId });
 
-        // Write the code to stdin immediately (this creates the file in the container)
         if (docker.stdin) {
           docker.stdin.write(code);
           docker.stdin.end();
-          console.log(`✍️ Code written to stdin for container ${containerName}`);
         }
 
         const terminateExecution = async (reason: string, exitCode: number = -1) => {
           if (isTerminated) return;
           isTerminated = true;
 
-          console.log(`⛔ Terminating job ${jobId}: ${reason}`);
+          console.log(`⛔ Terminating ${jobId}: ${reason}`);
 
           if (timeoutHandle) {
             clearTimeout(timeoutHandle);
-            timeoutHandle = null;
           }
 
-          try {
-            console.log(`💀 Killing container ${containerName}`);
-            const containerCleanedUp = await forceCleanupContainer(containerName);
-            
-            if (!containerCleanedUp) {
-              console.error(`⚠️ Container ${containerName} cleanup incomplete`);
-            }
+          await forceCleanupContainer(containerName);
 
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            if (docker) {
-              try {
-                if (docker.stdin && !docker.stdin.destroyed) {
-                  docker.stdin.end();
-                  docker.stdin.destroy();
-                }
-                if (docker.stdout && !docker.stdout.destroyed) docker.stdout.destroy();
-                if (docker.stderr && !docker.stderr.destroyed) docker.stderr.destroy();
-
-                if (!docker.killed) {
-                  docker.kill('SIGKILL');
-                }
-              } catch (e) {
-                console.log('Process already dead:', e);
-              }
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (await containerExists(containerName)) {
-              console.error(`⚠️ WARNING: Container ${containerName} still exists!`);
-              await forceCleanupContainer(containerName, 2);
-            }
-            
-          } catch (e) {
-            console.error('Termination error:', e);
+          if (docker) {
+            try {
+              if (docker.stdin && !docker.stdin.destroyed) docker.stdin.destroy();
+              if (docker.stdout && !docker.stdout.destroyed) docker.stdout.destroy();
+              if (docker.stderr && !docker.stderr.destroyed) docker.stderr.destroy();
+              if (!docker.killed) docker.kill('SIGKILL');
+            } catch (e) {}
           }
 
           activeProcesses.delete(jobId);
@@ -428,10 +243,10 @@ export const setupInteractiveWorker = async (io: any) => {
         };
 
         docker.on("error", async (error) => {
-          console.error(`❌ Docker spawn error for ${jobId}:`, error);
           dockerFailureCount++;
-          if (isTerminated) return;
-          await terminateExecution(`Execution error: ${error.message}`, -1);
+          if (!isTerminated) {
+            await terminateExecution(`Error: ${error.message}`, -1);
+          }
         });
 
         if (docker.stdout) {
@@ -442,13 +257,8 @@ export const setupInteractiveWorker = async (io: any) => {
             outputSize += Buffer.byteLength(chunk);
             outputLines += (chunk.match(/\n/g) || []).length;
 
-            if (outputSize > MAX_OUTPUT_SIZE) {
-              terminateExecution("Output limit exceeded (1MB max)", 137);
-              return;
-            }
-
-            if (outputLines > MAX_OUTPUT_LINES) {
-              terminateExecution("Output limit exceeded (10,000 lines max)", 137);
+            if (outputSize > MAX_OUTPUT_SIZE || outputLines > MAX_OUTPUT_LINES) {
+              terminateExecution("Output limit exceeded", 137);
               return;
             }
 
@@ -467,7 +277,7 @@ export const setupInteractiveWorker = async (io: any) => {
             outputSize += Buffer.byteLength(chunk);
 
             if (outputSize > MAX_OUTPUT_SIZE) {
-              terminateExecution("Output limit exceeded (1MB max)", 137);
+              terminateExecution("Output limit exceeded", 137);
               return;
             }
 
@@ -482,19 +292,13 @@ export const setupInteractiveWorker = async (io: any) => {
           if (isTerminated) return;
           isTerminated = true;
 
-          console.log(`✅ Job ${jobId} exited with code ${code}`);
+          console.log(`✅ Job ${jobId} exited: ${code}`);
 
-          if (timeoutHandle) {
-            clearTimeout(timeoutHandle);
-            timeoutHandle = null;
-          }
+          if (timeoutHandle) clearTimeout(timeoutHandle);
 
           try {
             if (docker) {
-              if (docker.stdin && !docker.stdin.destroyed) {
-                docker.stdin.end();
-                docker.stdin.destroy();
-              }
+              if (docker.stdin && !docker.stdin.destroyed) docker.stdin.destroy();
               if (docker.stdout && !docker.stdout.destroyed) docker.stdout.destroy();
               if (docker.stderr && !docker.stderr.destroyed) docker.stderr.destroy();
             }
@@ -502,17 +306,12 @@ export const setupInteractiveWorker = async (io: any) => {
 
           activeProcesses.delete(jobId);
           
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          if (await containerExists(containerName)) {
-            console.log(`🧹 Container ${containerName} still exists after close, cleaning up...`);
-            await forceCleanupContainer(containerName);
-          }
+          await forceCleanupContainer(containerName);
           
           if (code === 124) {
             io.to(socketId).emit("output", {
               type: "error",
-              data: "\n[Execution timeout (30 seconds max)]"
+              data: "\n[Execution timeout (30 seconds)]"
             });
           }
           
@@ -522,8 +321,7 @@ export const setupInteractiveWorker = async (io: any) => {
 
         timeoutHandle = setTimeout(async () => {
           if (!isTerminated) {
-            console.log(`⏱️ Timeout triggered for ${jobId}`);
-            await terminateExecution("Execution timeout (30 seconds max)", 124);
+            await terminateExecution("Execution timeout (30 seconds)", 124);
           }
         }, EXECUTION_TIMEOUT);
 
@@ -536,7 +334,7 @@ export const setupInteractiveWorker = async (io: any) => {
         
         io.to(socketId).emit("output", {
           type: "error",
-          data: `System error: ${error.message}`
+          data: `Error: ${error.message}`
         });
         
         io.to(socketId).emit("execution-complete", { exitCode: -1 });
@@ -550,9 +348,9 @@ export const setupInteractiveWorker = async (io: any) => {
         host: process.env.REDIS_HOST ?? "redis",
         port: parseInt(process.env.REDIS_PORT || "6379")
       },
-      concurrency: 3,
+      concurrency: 1,  // CRITICAL: Only 1 concurrent execution for t3.micro
       limiter: {
-        max: 10,
+        max: 5,        // Max 5 jobs per minute
         duration: 60000
       }
     }
@@ -570,67 +368,46 @@ export const setupInteractiveWorker = async (io: any) => {
     }
   });
 
-  worker.on('error', (err) => {
-    console.error('❌ Worker error:', err);
-  });
-
+  // Cleanup orphaned containers every 30 seconds
   setInterval(async () => {
     try {
       const { stdout } = await execAsync(
-        'docker ps -a --filter "name=exec-" --format "{{.Names}}\t{{.Status}}"', 
+        'docker ps -a --filter "name=exec-" --format "{{.Names}}"', 
         { timeout: 10000 }
       );
       
       const containers = stdout.trim().split('\n').filter(line => line);
       
-      if (containers.length > 0) {
-        console.log(`🔍 Found ${containers.length} exec- containers`);
+      for (const name of containers) {
+        const isTracked = Array.from(activeProcesses.values())
+          .some(p => p.containerId === name);
         
-        for (const container of containers) {
-          const [name, status] = container.split('\t');
-          
-          const isTracked = Array.from(activeProcesses.values())
-            .some(p => p.containerId === name);
-          
-          if (!isTracked) {
-            console.log(`🧹 Cleaning orphaned container: ${name} (${status})`);
-            await forceCleanupContainer(name as string);
-          }
+        if (!isTracked) {
+          console.log(`🧹 Cleaning orphan: ${name}`);
+          await forceCleanupContainer(name);
         }
       }
-    } catch (error) {
-      console.error('Periodic cleanup error:', error);
-    }
+    } catch (error) {}
   }, 30000);
 
-  setInterval(async () => {
-    await aggressiveDockerCleanup();
-  }, 3600000);
-
-  setInterval(async () => {
-    await cleanupOrphanedFiles();
-  }, 1800000);
-
+  // Health check
   setInterval(async () => {
     const isHealthy = await checkDockerHealth();
     
     if (!isHealthy && dockerFailureCount >= MAX_DOCKER_FAILURES) {
-      console.error('🚨 Docker is unhealthy! Pausing worker...');
+      console.error('🚨 Docker unhealthy! Pausing worker...');
       await worker.pause();
       
       setTimeout(async () => {
-        const recovered = await checkDockerHealth();
-        if (recovered) {
-          console.log('✅ Docker recovered, resuming worker');
+        if (await checkDockerHealth()) {
+          console.log('✅ Docker recovered');
           await worker.resume();
-        } else {
-          console.error('❌ Docker still unhealthy, will retry...');
         }
       }, 60000);
     }
   }, 30000);
 
-  console.log('✅ Interactive worker initialized and running');
+  console.log('✅ Interactive worker initialized (concurrency: 1)');
 
   return { worker, activeProcesses };
 };

@@ -3,7 +3,6 @@ dotenv.config();
 
 
 
-
 import express from 'express';
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -17,6 +16,7 @@ import { setupInteractiveWorker } from "./worker/interactiveWorker.js";
 import { dockerMaintenance, setupDockerMonitoring } from './utils/dockerMaintainence.js';
 import cookieParser from "cookie-parser";
 import cors from 'cors';
+import { getDockerStatus } from './utils/dockerRunner.js';
 
 const execAsync = promisify(exec);
 
@@ -137,15 +137,20 @@ app.get("/", (req, res) => {
 app.get('/health', async (req, res) => {
   const dockerHealth = await dockerMaintenance.checkHealth();
   const stats = await dockerMaintenance.logStats();
+  const memory = await dockerMaintenance.getMemoryUsage();
   const stuck = await dockerMaintenance.getStuckContainers();
+  const runnerStatus = getDockerStatus();
 
   res.json({
     status: dockerHealth.healthy ? 'healthy' : 'unhealthy',
     docker: dockerHealth,
     stats,
+    memory,
     stuckContainers: stuck,
     activeProcesses: activeProcesses.size,
-    rateLimits: userExecutionCount.size
+    rateLimits: userExecutionCount.size,
+    dockerRunner: runnerStatus,
+    instance: 't3.micro (1GB RAM)'
   });
 });
 

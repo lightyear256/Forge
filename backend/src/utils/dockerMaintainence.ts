@@ -8,7 +8,7 @@ export const dockerMaintenance = {
   async getDiskUsage() {
     try {
       const { stdout } = await execAsync('docker system df --format "table {{.Type}}\t{{.TotalCount}}\t{{.Size}}\t{{.Reclaimable}}"');
-      console.log('Docker Disk Usage:\n', stdout);
+      console.log('💾 Docker Disk Usage:\n', stdout);
       return stdout;
     } catch (error) {
       console.error('Failed to get disk usage:', error);
@@ -16,55 +16,48 @@ export const dockerMaintenance = {
     }
   },
 
-  
   async fullCleanup() {
     try {
-      console.log('Starting full Docker cleanup...');
+      console.log('🧹 Starting full Docker cleanup...');
       
-      // Stop execution containers
-      await execAsync('docker ps -q --filter "name=exec-" | xargs -r docker stop', { timeout: 30000 }).catch(() => {});
-      
-      // Remove execution containers
+      // Kill and remove exec containers
+      await execAsync('docker ps -q --filter "name=exec-" | xargs -r docker kill -s SIGKILL', { timeout: 30000 }).catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 2000));
       await execAsync('docker ps -aq --filter "name=exec-" | xargs -r docker rm -f', { timeout: 30000 }).catch(() => {});
       
-      // FIXED: Remove only dangling images (untagged), NOT all unused images
-      // This preserves language runtime images (python, node, java, etc.)
-      await execAsync('docker image prune -f --filter "until=24h"', { timeout: 30000 });
+      // IMPORTANT: Only remove dangling images (preserves language runtimes)
+      await execAsync('docker image prune -f', { timeout: 30000 });
       
-      // Clean old containers
+      // Clean old containers (not exec- ones, those are handled above)
       await execAsync('docker container prune -f --filter "until=1h"', { timeout: 30000 });
       
       // Clean build cache
-      await execAsync('docker builder prune -af --filter "until=48h"', { timeout: 30000 });
+      await execAsync('docker builder prune -f --filter "until=24h"', { timeout: 30000 });
       
       // Clean networks
       await execAsync('docker network prune -f', { timeout: 30000 });
       
-      console.log('✅ Full Docker cleanup completed');
+      console.log('✅ Full cleanup completed');
       return true;
     } catch (error) {
-      console.error('❌ Full cleanup failed:', error);
+      console.error('❌ Cleanup failed:', error);
       return false;
     }
   },
 
-  
   async emergencyCleanup() {
     try {
-      console.log('⚠️ EMERGENCY CLEANUP INITIATED');
+      console.log('🚨 EMERGENCY CLEANUP');
       
-      // Kill execution containers
+      // Force kill all exec containers
       await execAsync('docker kill $(docker ps -q --filter "name=exec-") 2>/dev/null || true', { timeout: 10000 });
-      
-      // Remove execution containers
+      await new Promise(resolve => setTimeout(resolve, 2000));
       await execAsync('docker rm -f $(docker ps -aq --filter "name=exec-") 2>/dev/null || true', { timeout: 10000 });
       
-      // FIXED: Remove only dangling images, NOT all images
-      // This preserves language runtime images
+      // Remove dangling images only
       await execAsync('docker image prune -f', { timeout: 60000 });
       
-      // FIXED: Only prune containers and networks, NOT entire system
-      // This preserves language runtime images
+      // Container and network cleanup
       await execAsync('docker container prune -f', { timeout: 60000 });
       await execAsync('docker network prune -f', { timeout: 30000 });
       
@@ -76,7 +69,6 @@ export const dockerMaintenance = {
     }
   },
 
-  
   async checkHealth() {
     try {
       await execAsync('docker info', { timeout: 5000 });
@@ -86,80 +78,72 @@ export const dockerMaintenance = {
     }
   },
 
-  
   async getStuckContainers() {
     try {
-      const { stdout: created } = await execAsync('docker ps -a --filter "name=exec-" --filter "status=created" --format "{{.Names}}"', { timeout: 5000 });
-      const { stdout: exited } = await execAsync('docker ps -a --filter "name=exec-" --filter "status=exited" --format "{{.Names}}"', { timeout: 5000 });
+      const { stdout } = await execAsync('docker ps -a --filter "name=exec-" --format "{{.Names}}\t{{.Status}}"', { timeout: 5000 });
       
-      const createdList = created.trim().split('\n').filter(n => n);
-      const exitedList = exited.trim().split('\n').filter(n => n);
-      
-      return {
-        created: createdList,
-        exited: exitedList,
-        total: createdList.length + exitedList.length
-      };
-    } catch (error) {
-      console.error('Failed to get stuck containers:', error);
-      return { created: [], exited: [], total: 0 };
-    }
-  },
-
-  
-  async logStats() {
-    try {
-      const { stdout: containerCount } = await execAsync('docker ps -q | wc -l');
-      const { stdout: imageCount } = await execAsync('docker images -q | wc -l');
-      const { stdout: volumeCount } = await execAsync('docker volume ls -q | wc -l');
-      
-      console.log('📊 Docker Stats:', {
-        runningContainers: containerCount.trim(),
-        totalImages: imageCount.trim(),
-        volumes: volumeCount.trim()
+      const containers = stdout.trim().split('\n').filter(n => n);
+      const stuck = containers.filter(c => {
+        const status = c.split('\t')[1] as any;
+        return status.includes('Created') || status.includes('Exited');
       });
       
       return {
-        containers: parseInt(containerCount.trim()),
-        images: parseInt(imageCount.trim()),
-        volumes: parseInt(volumeCount.trim())
+        all: containers.map(c => c.split('\t')[0]),
+        stuck: stuck.map(c => c.split('\t')[0]),
+        total: stuck.length
       };
     } catch (error) {
-      console.error('Failed to get stats:', error);
+      return { all: [], stuck: [], total: 0 };
+    }
+  },
+
+  async logStats() {
+    try {
+      const { stdout: containerCount } = await execAsync('docker ps -q | wc -l');
+      const { stdout: execCount } = await execAsync('docker ps -q --filter "name=exec-" | wc -l');
+      const { stdout: imageCount } = await execAsync('docker images -q | wc -l');
+      
+      const stats = {
+        total: parseInt(containerCount.trim()),
+        exec: parseInt(execCount.trim()),
+        images: parseInt(imageCount.trim())
+      };
+      
+      console.log('📊 Docker Stats:', stats);
+      return stats;
+    } catch (error) {
       return null;
     }
   },
 
-  
-  async restartDocker() {
+  async getMemoryUsage() {
     try {
-      console.log('🔄 Attempting to restart Docker daemon...');
-      await execAsync('systemctl restart docker', { timeout: 30000 });
-      console.log('✅ Docker daemon restarted');
-      return true;
+      const { stdout } = await execAsync("free -m | grep Mem | awk '{print $3, $2, ($3/$2)*100}'");
+      const [used, total, percent] = stdout.trim().split(' ').map(parseFloat) as any ;
+      
+      console.log(`💾 System Memory: ${used}MB / ${total}MB (${percent.toFixed(1)}%)`);
+      return { used, total, percent };
     } catch (error) {
-      console.error('❌ Failed to restart Docker (may need sudo):', error);
-      return false;
+      return null;
     }
   }
 };
 
 export const setupDockerMonitoring = () => {
-  // Monitor stats every 5 minutes
+  // Stats every 5 minutes
   setInterval(async () => {
     await dockerMaintenance.logStats();
+    await dockerMaintenance.getMemoryUsage();
     await dockerMaintenance.getDiskUsage();
   }, 300000);
 
   // Check for stuck containers every 2 minutes
   setInterval(async () => {
     const stuck = await dockerMaintenance.getStuckContainers();
-    if (stuck.total > 0) {
-      console.log(`⚠️ Found ${stuck.total} stuck containers`);
-      if (stuck.total > 10) {
-        console.log('🧹 Auto-cleaning stuck containers...');
-        await dockerMaintenance.fullCleanup();
-      }
+    if (stuck.total > 5) {
+      console.log(`⚠️ Found ${stuck.total} stuck containers - cleaning...`);
+      await dockerMaintenance.fullCleanup();
     }
   }, 120000);
 
