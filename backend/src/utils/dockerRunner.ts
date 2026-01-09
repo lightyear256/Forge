@@ -209,7 +209,7 @@ const runDocker = async (
           dockerCmd,
           {
             timeout: 10000,
-            maxBuffer: 512 * 1024, 
+            maxBuffer: 512 * 1024, // 512KB
             killSignal: "SIGKILL",
           },
           async (error, stdout, stderr) => {

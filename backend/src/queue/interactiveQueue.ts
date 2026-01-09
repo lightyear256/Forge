@@ -35,7 +35,7 @@ export const interactiveWorker = new Worker(
   },
   {
     connection: redisConnection,
-    concurrency: 1, 
+    concurrency: 1, // IMPORTANT: Limit concurrency on t3.micro to prevent memory issues
     lockDuration: 60000, // 60 seconds - how long job can run before considered stalled
     lockRenewTime: 15000, // 15 seconds - renew lock every 15s while processing
     stalledInterval: 30000, // Check for stalled jobs every 30s

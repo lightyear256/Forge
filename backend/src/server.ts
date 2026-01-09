@@ -423,7 +423,7 @@ setInterval(() => {
 setInterval(async () => {
   console.log("🧹 Running periodic container cleanup...");
   await cleanupAllContainers();
-}, 1800000); 
+}, 1800000); // 30 minutes
 
 setInterval(async () => {
   console.log("🧹 Running scheduled Docker cleanup...");
