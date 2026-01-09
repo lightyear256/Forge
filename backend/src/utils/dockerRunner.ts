@@ -21,7 +21,6 @@ interface ExecutionResult {
 let dockerFailureCount = 0;
 const MAX_DOCKER_FAILURES = 5;
 
-// CRITICAL: Global execution control for t3.micro
 let activeNonInteractiveExecutions = 0;
 const MAX_NON_INTERACTIVE_EXECUTIONS = 1;
 
@@ -40,7 +39,7 @@ const checkSystemMemory = async (): Promise<boolean> => {
     }
     return true;
   } catch (error) {
-    return true; // Fail open
+    return true;
   }
 };
 
@@ -81,7 +80,6 @@ const runDocker = async (
   input?: string,
   filename?: string
 ): Promise<ExecutionResult> => {
-  // Wait if too many executions
   while (activeNonInteractiveExecutions >= MAX_NON_INTERACTIVE_EXECUTIONS) {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -153,6 +151,7 @@ const runDocker = async (
 
         command = `javac /app/${containerFileName} -d /tmp && java -cp /tmp ${javaClassName}`;
       } else {
+
         return {
           stdout: "",
           stderr:
@@ -203,7 +202,6 @@ const runDocker = async (
 
       const hostMountPath = tempDirPath.replace(/\\/g, "/");
 
-      // CRITICAL: Enforce strict limits
       const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --memory-swap="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} --ulimit nofile=100:100 -v "${hostMountPath}:/app:ro" ${config.image} sh -c "${command}"`;
 
       return await new Promise<ExecutionResult>((resolve) => {
@@ -211,7 +209,7 @@ const runDocker = async (
           dockerCmd,
           {
             timeout: 10000,
-            maxBuffer: 512 * 1024, // 512KB
+            maxBuffer: 512 * 1024, 
             killSignal: "SIGKILL",
           },
           async (error, stdout, stderr) => {

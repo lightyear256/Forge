@@ -8,16 +8,14 @@ export interface DockerConfig {
 }
 
 export const getDockerConfig = (language: string): DockerConfig | null => {
-  // CRITICAL: Memory limits optimized for t3.micro
-  // Total should not exceed ~700MB for all containers combined
   const configs: Record<string, DockerConfig> = {
     python: {
       fileName: "main.py",
       image: "python:3.11-alpine",
       command: "python3 -u /app/main.py",
       pidsLimit: 50,
-      memory: "100m",  // Reduced from 128m
-      cpus: "0.4"      // Reduced from 0.5
+      memory: "100m",  
+      cpus: "0.4"      
     },
     javascript: {
       fileName: "main.js",
@@ -32,7 +30,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
       image: "frolvlad/alpine-gxx",
       command: "g++ -O2 -o /tmp/prog /app/main.cpp && /tmp/prog",
       pidsLimit: 50,
-      memory: "120m",  // Compilation needs slightly more
+      memory: "120m",  
       cpus: "0.4"
     },
     c: {
@@ -72,7 +70,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
       image: "rust:alpine",
       command: "rustc /app/main.rs -o /tmp/prog && /tmp/prog",
       pidsLimit: 50,
-      memory: "150m",  // Rust compilation needs more
+      memory: "150m",  
       cpus: "0.4"
     }
   };
