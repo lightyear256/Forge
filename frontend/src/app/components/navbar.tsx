@@ -47,7 +47,7 @@ const NavBar = () => {
       { withCredentials: true }
     );
     
-    checkAuth();
+    await checkAuth();
     setIsMobileMenuOpen(false);
     router.replace("/");
   } catch (error) {
@@ -121,7 +121,7 @@ const NavBar = () => {
                   className="backdrop-blur-sm rounded-lg"
                 >
                   <Image 
-                    src={'/assets/logo.jpeg'} 
+                    src={'/assets/logo2.jpeg'} 
                     className='rounded-md' 
                     width={isScrolled ? 60 : 80} 
                     height={isScrolled ? 35 : 45} 
