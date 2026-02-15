@@ -15,19 +15,19 @@ export const interactiveQueue = new Queue('interactiveQueue', {
       type: 'exponential',
       delay: 2000
     },
-    removeOnComplete: true, // Remove completed jobs immediately
+    removeOnComplete: true, 
     removeOnFail: false,
   }
 });
 
 interactiveQueue.on('error', (error) => {
-  console.error('❌ Queue error:', error);
+  console.error(' Queue error:', error);
 });
 
 export const interactiveWorker = new Worker(
   'interactiveQueue',
   async (job) => {
-    console.log(`🔄 Processing job ${job.id}`);
+    console.log(` Processing job ${job.id}`);
     
     const { data } = job;
     
@@ -35,50 +35,47 @@ export const interactiveWorker = new Worker(
   },
   {
     connection: redisConnection,
-    concurrency: 1, // IMPORTANT: Limit concurrency on t3.micro to prevent memory issues
-    lockDuration: 60000, // 60 seconds - how long job can run before considered stalled
-    lockRenewTime: 15000, // 15 seconds - renew lock every 15s while processing
-    stalledInterval: 30000, // Check for stalled jobs every 30s
-    maxStalledCount: 2, // Job fails after being stalled 2 times
+    concurrency: 1, 
+    lockDuration: 60000, 
+    lockRenewTime: 15000, 
+    stalledInterval: 30000, 
+    maxStalledCount: 2, 
     limiter: {
-      max: 5, // Max 5 jobs per duration
-      duration: 1000 // Per second
+      max: 5, 
+      duration: 1000 
     }
   }
 );
 
-// Worker event listeners
 interactiveWorker.on('error', (error) => {
-  console.error('❌ Worker error:', error);
+  console.error(' Worker error:', error);
 });
 
 interactiveWorker.on('failed', (job, error) => {
-  console.error(`❌ Job ${job?.id} failed:`, error);
-  // Jobs automatically removed based on removeOnFail setting
+  console.error(` Job ${job?.id} failed:`, error);
 });
 
 interactiveWorker.on('completed', (job) => {
-  console.log(`✅ Job ${job.id} completed and removed from queue`);
+  console.log(` Job ${job.id} completed and removed from queue`);
 });
 
 interactiveWorker.on('stalled', (jobId) => {
-  console.warn(`⚠️ Job ${jobId} stalled`);
+  console.warn(` Job ${jobId} stalled`);
 });
 
 interactiveWorker.on('active', (job) => {
-  console.log(`▶️ Job ${job.id} is now active`);
+  console.log(` Job ${job.id} is now active`);
 });
 
-// Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('🛑 SIGTERM received, closing worker...');
+  console.log(' SIGTERM received, closing worker...');
   await interactiveWorker.close();
   await interactiveQueue.close();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('🛑 SIGINT received, closing worker...');
+  console.log(' SIGINT received, closing worker...');
   await interactiveWorker.close();
   await interactiveQueue.close();
   process.exit(0);

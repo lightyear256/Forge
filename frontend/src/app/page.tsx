@@ -105,7 +105,7 @@ export default function Home() {
       <footer className="bg-black text-gray-400 py-8 sm:py-10 px-4 border-t border-zinc-800">
         <div className="max-w-7xl mx-auto text-center">
           <p className="text-base sm:text-lg   text-white mb-2">Forge</p>
-          <p className="text-xs sm:text-sm">© 2024 Forge. All rights reserved.</p>
+          <p className="text-xs sm:text-sm"> 2024 Forge. All rights reserved.</p>
           <div className="mt-3 sm:mt-4 flex flex-wrap justify-center gap-4 sm:gap-6">
             <a href="#" className="hover:text-purple-400 transition-colors text-sm sm:text-base">Terms</a>
             <a href="#" className="hover:text-purple-400 transition-colors text-sm sm:text-base">Privacy</a>

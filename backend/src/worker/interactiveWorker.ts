@@ -13,8 +13,8 @@ const activeProcesses = new Map<string, {
   socketId: string;
 }>();
 
-const MAX_OUTPUT_SIZE = 512 * 1024; // Reduced from 1MB
-const MAX_OUTPUT_LINES = 5000;      // Reduced from 10000
+const MAX_OUTPUT_SIZE = 512 * 1024; 
+const MAX_OUTPUT_LINES = 5000;     
 const EXECUTION_TIMEOUT = 30000;
 
 let dockerFailureCount = 0;
@@ -26,7 +26,7 @@ const checkSystemMemory = async (): Promise<boolean> => {
     const memoryUsagePercent = parseFloat(stdout.trim());
     
     if (memoryUsagePercent > 75) {
-      console.error(`💾 Memory usage critical: ${memoryUsagePercent.toFixed(1)}%`);
+      console.error(` Memory usage critical: ${memoryUsagePercent.toFixed(1)}%`);
       return false;
     }
     return true;
@@ -38,7 +38,7 @@ const checkSystemMemory = async (): Promise<boolean> => {
 const forceCleanupContainer = async (containerName: string, maxRetries: number = 3): Promise<boolean> => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`🧹 Cleanup attempt ${attempt}/${maxRetries} for: ${containerName}`);
+      console.log(` Cleanup attempt ${attempt}/${maxRetries} for: ${containerName}`);
       
       try {
         await execAsync(`docker kill -s SIGKILL ${containerName}`, { timeout: 10000 });
@@ -55,12 +55,12 @@ const forceCleanupContainer = async (containerName: string, maxRetries: number =
       );
       
       if (stdout.trim() !== containerName) {
-        console.log(`✅ Container ${containerName} successfully cleaned up`);
+        console.log(` Container ${containerName} successfully cleaned up`);
         return true;
       }
     } catch (error) {
       if (attempt === maxRetries) {
-        console.error(`❌ Failed to cleanup ${containerName}`);
+        console.error(` Failed to cleanup ${containerName}`);
         return false;
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -74,23 +74,22 @@ const checkDiskSpace = async (): Promise<boolean> => {
     const { stdout } = await execAsync("df -h /var/lib/docker | tail -1 | awk '{print $5}' | sed 's/%//'");
     const usage = parseInt(stdout.trim());
     
-    // CRITICAL: Handle NaN case
     if (isNaN(usage)) {
-      console.error('⚠️ Failed to parse disk usage, failing open');
-      return true; // Fail open if we can't parse
+      console.error('Failed to parse disk usage, failing open');
+      return true; 
     }
     
-    console.log(`💾 Disk usage: ${usage}%`);
+    console.log(` Disk usage: ${usage}%`);
     
     if (usage > 85) {
-      console.error(`💾 Disk usage critical: ${usage}%`);
+      console.error(` Disk usage critical: ${usage}%`);
       return false;
     }
     
     return true;
   } catch (error) {
-    console.error('⚠️ Disk check error:', error);
-    return true; // Fail open on error
+    console.error(' Disk check error:', error);
+    return true; 
   }
 };
 
@@ -106,7 +105,7 @@ const checkDockerHealth = async (): Promise<boolean> => {
 };
 
 export const setupInteractiveWorker = async (io: any) => {
-  console.log('⚙️ Initializing interactive worker for t3.micro...');
+  console.log('️ Initializing interactive worker for t3.micro...');
   
   const worker = new Worker(
     "interactiveQueue",
@@ -121,7 +120,7 @@ export const setupInteractiveWorker = async (io: any) => {
       let containerName = '';
       let docker: ChildProcess | null = null;
 
-      console.log(`🚀 Starting job ${jobId} (${language})`);
+      console.log(` Starting job ${jobId} (${language})`);
 
       try {
         if (dockerFailureCount >= MAX_DOCKER_FAILURES) {
@@ -188,7 +187,6 @@ export const setupInteractiveWorker = async (io: any) => {
         
         const setupAndRun = `mkdir -p /app && cat > /app/${actualFileName} && timeout 32 ${command}`;
         
-        // CRITICAL: Strict resource limits for t3.micro
         const dockerCmd = [
           "run", 
           "--rm",
@@ -197,7 +195,7 @@ export const setupInteractiveWorker = async (io: any) => {
           `--name=${containerName}`,
           "--network", "none",
           `--memory=${config.memory}`,
-          `--memory-swap=${config.memory}`, // No extra swap
+          `--memory-swap=${config.memory}`, 
           `--cpus=${config.cpus}`,
           `--pids-limit=${config.pidsLimit}`,
           "--ulimit", "nofile=100:100",
@@ -205,7 +203,7 @@ export const setupInteractiveWorker = async (io: any) => {
           "sh", "-c", `${setupAndRun} || exit 124`
         ];
 
-        console.log(`🐳 Spawning: ${containerName} (mem: ${config.memory}, cpu: ${config.cpus})`);
+        console.log(` Spawning: ${containerName} (mem: ${config.memory}, cpu: ${config.cpus})`);
         
         docker = spawn("docker", dockerCmd, {
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -229,7 +227,7 @@ export const setupInteractiveWorker = async (io: any) => {
           if (isTerminated) return;
           isTerminated = true;
 
-          console.log(`⛔ Terminating ${jobId}: ${reason}`);
+          console.log(` Terminating ${jobId}: ${reason}`);
 
           if (timeoutHandle) {
             clearTimeout(timeoutHandle);
@@ -307,7 +305,7 @@ export const setupInteractiveWorker = async (io: any) => {
           if (isTerminated) return;
           isTerminated = true;
 
-          console.log(`✅ Job ${jobId} exited: ${code}`);
+          console.log(` Job ${jobId} exited: ${code}`);
 
           if (timeoutHandle) clearTimeout(timeoutHandle);
 
@@ -341,7 +339,7 @@ export const setupInteractiveWorker = async (io: any) => {
         }, EXECUTION_TIMEOUT);
 
       } catch (error: any) {
-        console.error(`❌ Job ${jobId} error:`, error);
+        console.error(` Job ${jobId} error:`, error);
         
         if (containerName) {
           await forceCleanupContainer(containerName);
@@ -363,16 +361,16 @@ export const setupInteractiveWorker = async (io: any) => {
         host: process.env.REDIS_HOST ?? "redis",
         port: parseInt(process.env.REDIS_PORT || "6379")
       },
-      concurrency: 1,  // CRITICAL: Only 1 concurrent execution for t3.micro
+      concurrency: 1,  
       limiter: {
-        max: 5,        // Max 5 jobs per minute
+        max: 5,        
         duration: 60000
       }
     }
   );
 
   worker.on('failed', async (job, err) => {
-    console.error(`❌ Job ${job?.id} failed:`, err);
+    console.error(` Job ${job?.id} failed:`, err);
     
     if (job?.id) {
       const processInfo = activeProcesses.get(job.id as string);
@@ -383,7 +381,6 @@ export const setupInteractiveWorker = async (io: any) => {
     }
   });
 
-  // Cleanup orphaned containers every 30 seconds
   setInterval(async () => {
     try {
       const { stdout } = await execAsync(
@@ -398,31 +395,30 @@ export const setupInteractiveWorker = async (io: any) => {
           .some(p => p.containerId === name);
         
         if (!isTracked) {
-          console.log(`🧹 Cleaning orphan: ${name}`);
+          console.log(` Cleaning orphan: ${name}`);
           await forceCleanupContainer(name);
         }
       }
     } catch (error) {}
   }, 30000);
 
-  // Health check
   setInterval(async () => {
     const isHealthy = await checkDockerHealth();
     
     if (!isHealthy && dockerFailureCount >= MAX_DOCKER_FAILURES) {
-      console.error('🚨 Docker unhealthy! Pausing worker...');
+      console.error(' Docker unhealthy! Pausing worker...');
       await worker.pause();
       
       setTimeout(async () => {
         if (await checkDockerHealth()) {
-          console.log('✅ Docker recovered');
+          console.log(' Docker recovered');
           await worker.resume();
         }
       }, 60000);
     }
   }, 30000);
 
-  console.log('✅ Interactive worker initialized (concurrency: 1)');
+  console.log(' Interactive worker initialized (concurrency: 1)');
 
   return { worker, activeProcesses };
 };

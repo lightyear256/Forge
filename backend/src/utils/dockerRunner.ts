@@ -33,7 +33,7 @@ const checkSystemMemory = async (): Promise<boolean> => {
 
     if (memoryUsagePercent > 75) {
       console.error(
-        `💾 Memory usage critical: ${memoryUsagePercent.toFixed(1)}%`
+        ` Memory usage critical: ${memoryUsagePercent.toFixed(1)}%`
       );
       return false;
     }
@@ -51,7 +51,7 @@ const checkDiskSpace = async (): Promise<boolean> => {
     const usage = parseInt(stdout.trim());
 
     if (usage > 85) {
-      console.error(`💾 Disk usage critical: ${usage}%`);
+      console.error(` Disk usage critical: ${usage}%`);
       return false;
     }
     return true;
@@ -68,7 +68,7 @@ const checkDockerHealth = async (): Promise<boolean> => {
   } catch (error) {
     dockerFailureCount++;
     console.error(
-      `❌ Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`
+      ` Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`
     );
     return false;
   }
@@ -86,7 +86,7 @@ const runDocker = async (
 
   activeNonInteractiveExecutions++;
   console.log(
-    `🚀 Non-interactive executions: ${activeNonInteractiveExecutions}/${MAX_NON_INTERACTIVE_EXECUTIONS}`
+    ` Non-interactive executions: ${activeNonInteractiveExecutions}/${MAX_NON_INTERACTIVE_EXECUTIONS}`
   );
 
   try {
@@ -198,7 +198,7 @@ const runDocker = async (
       await mkdir(tempDirPath, { recursive: true });
       await writeFile(tempFile, code, "utf8");
 
-      console.log(`📝 Running: ${language} - ${actualFileName}`);
+      console.log(` Running: ${language} - ${actualFileName}`);
 
       const hostMountPath = tempDirPath.replace(/\\/g, "/");
 

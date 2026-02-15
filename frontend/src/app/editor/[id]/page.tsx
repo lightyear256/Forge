@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Play,
   Save,
@@ -61,11 +61,12 @@ export default function CodeEditor() {
 
   const [terminalHeight, setTerminalHeight] = useState(256);
   const [isResizing, setIsResizing] = useState(false);
+  const [isTerminalVisible, setIsTerminalVisible] = useState(true);
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<{ startY: number; startHeight: number } | null>(
-    null
+    null,
   );
 
   const isRunningRef = useRef(false);
@@ -87,12 +88,17 @@ export default function CodeEditor() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing || !resizeRef.current) return;
 
-      const delta = e.clientY - resizeRef.current.startY;
+      const delta = resizeRef.current.startY - e.clientY;
       const newHeight = Math.min(
         Math.max(resizeRef.current.startHeight + delta, 150),
-        window.innerHeight - 300
+        window.innerHeight - 300,
       );
       setTerminalHeight(newHeight);
+      if (newHeight <= 150) {
+        setIsTerminalVisible(false);
+      } else {
+        setIsTerminalVisible(true);
+      }
     };
 
     const handleMouseUp = () => {
@@ -124,6 +130,16 @@ export default function CodeEditor() {
     };
   };
 
+  const startResizeFromBottom = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    setIsTerminalVisible(true);
+    resizeRef.current = {
+      startY: e.clientY,
+      startHeight: 0, // Start from hidden
+    };
+  };
+
   useEffect(() => {
     fetchFiles();
   }, [projectId]);
@@ -135,15 +151,17 @@ export default function CodeEditor() {
         transports: ["websocket"],
         reconnection: true,
         withCredentials: true,
-      }
+      },
     );
 
     newSocket.on("connect", () => {
+      console.log(" Socket connected:", newSocket.id);
       setIsConnected(true);
       setSocket(newSocket);
     });
 
     newSocket.on("disconnect", () => {
+      console.log(" Socket disconnected");
       setIsConnected(false);
       isRunningRef.current = false;
       runningJobIdRef.current = "";
@@ -151,11 +169,17 @@ export default function CodeEditor() {
       setCurrentJobId("");
     });
 
+    newSocket.on("execution-started", (data: { jobId: string }) => {
+      console.log(" Execution started:", data.jobId);
+    });
+
     newSocket.on("output", (data: { type: string; data: string }) => {
+      console.log(" Output received:", data.type, data.data.substring(0, 50));
       addOutput(data.data, data.type);
     });
 
     newSocket.on("execution-complete", (data: { exitCode: number }) => {
+      console.log(" Execution complete with code:", data.exitCode);
       isRunningRef.current = false;
       runningJobIdRef.current = "";
 
@@ -164,7 +188,12 @@ export default function CodeEditor() {
       addOutput(`\n[Process exited with code ${data.exitCode}]`, "info");
     });
 
+    newSocket.on("execution-completed", (data: { jobId: string }) => {
+      console.log(" Execution completed:", data.jobId);
+    });
+
     newSocket.on("rate-limit-exceeded", (data: { message: string }) => {
+      console.log("️ Rate limit exceeded:", data.message);
       isRunningRef.current = false;
       runningJobIdRef.current = "";
       setIsRunning(false);
@@ -172,6 +201,7 @@ export default function CodeEditor() {
     });
 
     newSocket.on("concurrent-limit-exceeded", (data: { message: string }) => {
+      console.log("️ Concurrent limit exceeded:", data.message);
       isRunningRef.current = false;
       runningJobIdRef.current = "";
       setIsRunning(false);
@@ -179,6 +209,7 @@ export default function CodeEditor() {
     });
 
     newSocket.on("execution-blocked", (data: { message: string }) => {
+      console.log("️ Execution blocked:", data.message);
       isRunningRef.current = false;
       runningJobIdRef.current = "";
       setIsRunning(false);
@@ -187,6 +218,7 @@ export default function CodeEditor() {
 
     return () => {
       if (runningJobIdRef.current && newSocket.connected) {
+        console.log(" Terminating job:", runningJobIdRef.current);
         newSocket.emit("terminate", { jobId: runningJobIdRef.current });
       }
       newSocket.close();
@@ -198,7 +230,7 @@ export default function CodeEditor() {
       setIsLoadingFiles(true);
       const response = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/project/${projectId}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
       if (response.data.success) {
         setFiles(response.data.project.files);
@@ -242,7 +274,7 @@ export default function CodeEditor() {
           filename: newFileName,
           code: "",
         },
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
@@ -272,7 +304,7 @@ export default function CodeEditor() {
         {
           data: { projectId, filename: fileToDelete.name, id: fileToDelete.id },
           withCredentials: true,
-        }
+        },
       );
 
       await fetchFiles();
@@ -294,7 +326,7 @@ export default function CodeEditor() {
   const renameFile = async (
     oldFilename: string,
     newFilename: string,
-    id: string
+    id: string,
   ) => {
     if (!newFilename.trim() || oldFilename === newFilename) {
       setRenamingFileId(null);
@@ -305,7 +337,7 @@ export default function CodeEditor() {
       await axios.put(
         `${process.env.NEXT_PUBLIC_API_URL}/project/rename_file`,
         { projectId, id, newFilename },
-        { withCredentials: true }
+        { withCredentials: true },
       );
       await fetchFiles();
       setRenamingFileId(null);
@@ -335,7 +367,7 @@ export default function CodeEditor() {
           filename: currentFile.filename,
           code,
         },
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
@@ -349,11 +381,48 @@ export default function CodeEditor() {
     }
   };
 
-  const runCode = async () => {
-    if (isRunningRef.current || !socket || !isConnected || !currentFile) {
-      if (isRunningRef.current) {
-        toast.error("Code is already running. Please wait...");
+  // Add this ref near your other refs
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Add this new debouncedSave
+  const debouncedSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
+      saveCode();
+    }, 1000);
+  }, [code, currentFile, projectId]);
+
+  // Add cleanup
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
       }
+    };
+  }, []);
+  const runCode = async () => {
+    // Validation checks
+    if (!currentFile) {
+      toast.error("Please select a file first");
+      return;
+    }
+
+    if (!isConnected) {
+      toast.error("Not connected to server. Please wait...");
+      console.log(" Socket not connected:", { isConnected });
+      return;
+    }
+
+    if (!socket) {
+      toast.error("Socket not initialized. Refreshing page may help...");
+      console.log(" Socket is null:", { socket });
+      return;
+    }
+
+    if (isRunningRef.current) {
+      toast.error("Code is already running. Please wait...");
       return;
     }
 
@@ -362,6 +431,7 @@ export default function CodeEditor() {
 
     setOutput([]);
     addOutput(`Running ${currentFile.filename}...\n`, "info");
+    console.log(" Sending run request for:", currentFile.filename);
 
     try {
       const response = await axios.post(
@@ -372,23 +442,32 @@ export default function CodeEditor() {
           language,
           socketId: socket.id,
         },
-        { withCredentials: true }
+        { withCredentials: true },
       );
+
+      console.log(" Server response:", response.data);
 
       if (response.data.success) {
         runningJobIdRef.current = response.data.jobId;
         setCurrentJobId(response.data.jobId);
+        console.log(" Job started with ID:", response.data.jobId);
       } else {
         isRunningRef.current = false;
         runningJobIdRef.current = "";
         setIsRunning(false);
-        addOutput(`✗ Error: ${response.data.error}`, "error");
+        const errorMsg = response.data.error || "Unknown error";
+        addOutput(`✗ Error: ${errorMsg}`, "error");
+        console.log(" Server error:", errorMsg);
       }
     } catch (error: any) {
       isRunningRef.current = false;
       runningJobIdRef.current = "";
       setIsRunning(false);
-      addOutput(`✗ Connection error: ${error.message}`, "error");
+      const errorMsg =
+        error.response?.data?.error || error.message || "Connection error";
+      addOutput(`✗ Error: ${errorMsg}`, "error");
+      console.error(" Request failed:", error);
+      toast.error(errorMsg);
     }
   };
 
@@ -629,7 +708,7 @@ export default function CodeEditor() {
         {/* Main Content */}
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
           {/* Top Bar */}
-          <div className="h-12 md:h-16 bg-black border-b border-slate-800 flex items-center justify-between px-4 md:px-6 gap-2 flex-shrink-0">
+          <div className="h-12 md:h-16 bg-black border-b border-slate-800 flex items-center justify-between px-4 md:px-6 gap-2 shrink-0">
             <div className="flex items-center gap-3 md:gap-6 min-w-0 flex-1">
               <span className="text-xs md:text-sm text-slate-400 font-light truncate">
                 {currentFile ? currentFile.filename : "No file selected"}
@@ -646,7 +725,7 @@ export default function CodeEditor() {
               </div>
             </div>
 
-            <div className="flex gap-2 md:gap-3 flex-shrink-0">
+            <div className="flex gap-2 md:gap-3 shrink-0">
               <button
                 onClick={saveCode}
                 disabled={isSaving || !currentFile}
@@ -691,7 +770,10 @@ export default function CodeEditor() {
                   height="100%"
                   language={language}
                   value={code}
-                  onChange={(value) => setCode(value || "")}
+                  onChange={(value) => {
+                    setCode(value || "");
+                    debouncedSave();
+                  }}
                   theme="vs-dark"
                   options={{
                     minimap: { enabled: window.innerWidth > 768 },
@@ -732,68 +814,78 @@ export default function CodeEditor() {
             </div>
 
             {/* Terminal */}
-            <div
-              style={{
-                height:
-                  window.innerWidth < 768 ? "200px" : `${terminalHeight}px`,
-              }}
-              className="bg-black flex flex-col border-t border-slate-800 min-h-[150px] flex-shrink-0"
-            >
+            {isTerminalVisible && (
               <div
-                onMouseDown={startResize}
-                className={`h-1 bg-slate-800 hover:bg-purple-500 cursor-ns-resize transition-colors hidden md:block ${
-                  isResizing ? "bg-purple-500" : ""
-                }`}
-              />
-
-              <div className="h-10 bg-black border-b border-slate-800 px-4 md:px-6 flex items-center gap-2 flex-shrink-0">
-                <Terminal className="w-3 h-3 text-slate-600" />
-                <span className="text-xs text-slate-600 uppercase tracking-wider">
-                  Terminal
-                </span>
-              </div>
-
-              <div
-                ref={terminalRef}
-                className="flex-1 p-4 md:p-6 font-mono text-xs overflow-y-auto overflow-x-auto"
+                style={{
+                  height:
+                    window.innerWidth < 768 ? "200px" : `${terminalHeight}px`,
+                }}
+                className="bg-black flex flex-col border-t border-slate-800 min-h-[150px] shrink-0"
               >
-                {output.length === 0 ? (
-                  <div className="text-slate-600">Ready to run...</div>
-                ) : (
-                  output.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`${getOutputColor(
-                        item.type
-                      )} whitespace-pre-wrap break-words`}
-                    >
-                      {item.type === "input" && "> "}
-                      {item.text}
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="bg-black p-3 flex gap-2 md:gap-3 border-t border-slate-800 flex-shrink-0">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={currentInput}
-                  onChange={(e) => setCurrentInput(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && sendInput()}
-                  disabled={!isRunning}
-                  placeholder={isRunning ? "Type input..." : "Run code first"}
-                  className="flex-1 px-0 py-2 bg-transparent border-b border-slate-800 focus:border-purple-500 focus:outline-none text-xs md:text-sm disabled:opacity-50 placeholder-slate-700 min-w-0"
+                <div
+                  onMouseDown={startResize}
+                  className={`h-1 bg-slate-800 hover:bg-purple-500 cursor-ns-resize transition-colors hidden md:block ${
+                    isResizing ? "bg-purple-500" : ""
+                  }`}
                 />
-                <button
-                  onClick={sendInput}
-                  disabled={!isRunning || !currentInput.trim()}
-                  className="px-3 md:px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-800 disabled:text-slate-600 transition-colors text-xs md:text-sm flex-shrink-0"
+
+                <div className="h-10 bg-black border-b border-slate-800 px-4 md:px-6 flex items-center gap-2 shrink-0">
+                  <Terminal className="w-3 h-3 text-slate-600" />
+                  <span className="text-xs text-slate-600 uppercase tracking-wider">
+                    Terminal
+                  </span>
+                </div>
+
+                <div
+                  ref={terminalRef}
+                  className="flex-1 p-4 md:p-6 font-mono text-xs overflow-y-auto overflow-x-auto"
                 >
-                  Send
-                </button>
+                  {output.length === 0 ? (
+                    <div className="text-slate-600">Ready to run...</div>
+                  ) : (
+                    output.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`${getOutputColor(
+                          item.type,
+                        )} whitespace-pre-wrap wrap-break-word`}
+                      >
+                        {item.type === "input" && "> "}
+                        {item.text}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="bg-black p-3 flex gap-2 md:gap-3 border-t border-slate-800 shrink-0">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={currentInput}
+                    onChange={(e) => setCurrentInput(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && sendInput()}
+                    disabled={!isRunning}
+                    placeholder={isRunning ? "Type input..." : "Run code first"}
+                    className="flex-1 px-0 py-2 bg-transparent border-b border-slate-800 focus:border-purple-500 focus:outline-none text-xs md:text-sm disabled:opacity-50 placeholder-slate-700 min-w-0"
+                  />
+                  <button
+                    onClick={sendInput}
+                    disabled={!isRunning || !currentInput.trim()}
+                    className="px-3 md:px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-800 disabled:text-slate-600 transition-colors text-xs md:text-sm shrink-0"
+                  >
+                    Send
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Terminal Toggle Bar */}
+            {!isTerminalVisible && (
+              <div
+                onMouseDown={startResizeFromBottom}
+                className="h-2 bg-slate-800 hover:bg-purple-500 cursor-ns-resize transition-colors"
+              />
+            )}
           </div>
         </div>
       </div>

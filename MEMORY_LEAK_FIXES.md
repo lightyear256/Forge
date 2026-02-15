@@ -8,7 +8,7 @@ Your application becomes unreachable after 1-2 days on AWS t3.micro because of *
 
 ## Issues Found & Fixed
 
-### 1. **userExecutionCount Map Memory Leak** ❌
+### 1. **userExecutionCount Map Memory Leak** 
 
 **Problem:** The rate limit tracking Map accumulates entries with no aggressive cleanup.
 
@@ -31,7 +31,7 @@ setInterval(() => {
     }
   }
   if (userExecutionCount.size > 100) {
-    console.warn(`⚠️ userExecutionCount size: ${userExecutionCount.size}`);
+    console.warn(`️ userExecutionCount size: ${userExecutionCount.size}`);
   }
 }, 30000); // 30s interval
 ```
@@ -40,7 +40,7 @@ setInterval(() => {
 
 ---
 
-### 2. **socketExecutingStatus Map Not Cleaned** ❌
+### 2. **socketExecutingStatus Map Not Cleaned** 
 
 **Problem:** Socket status tracking Map is never cleaned up when sockets are orphaned.
 
@@ -66,7 +66,7 @@ setInterval(() => {
   const socketStatusSize = socketExecutingStatus.size;
 
   if (socketStatusSize > clientCount + 10) {
-    console.warn("⚠️ Socket status map larger than clients");
+    console.warn("️ Socket status map larger than clients");
     // Force cleanup orphaned sockets
     for (const [socketId] of socketExecutingStatus.entries()) {
       if (!io.sockets.sockets.has(socketId)) {
@@ -81,7 +81,7 @@ setInterval(() => {
 
 ---
 
-### 3. **Slow Docker Container Cleanup** ❌
+### 3. **Slow Docker Container Cleanup** 
 
 **Problem:** Container cleanup intervals were too infrequent.
 
@@ -95,19 +95,19 @@ setInterval(() => {
 ```typescript
 // Periodic cleanup: now every 30 minutes
 setInterval(async () => {
-  console.log("🧹 Running periodic container cleanup...");
+  console.log(" Running periodic container cleanup...");
   await cleanupAllContainers();
 }, 1800000); // 30 minutes
 
 // Deep cleanup: now every 30 minutes (was 60)
 setInterval(async () => {
-  console.log("🧹 Running scheduled Docker cleanup...");
+  console.log(" Running scheduled Docker cleanup...");
   await dockerMaintenance.fullCleanup();
 
   // NEW: Check memory and trigger emergency cleanup
   const memory = await dockerMaintenance.getMemoryUsage();
   if (memory && memory.percent > 80) {
-    console.warn("⚠️ Memory above 80%, emergency cleanup...");
+    console.warn("️ Memory above 80%, emergency cleanup...");
     await dockerMaintenance.emergencyCleanup();
   }
 }, 1800000); // Every 30 minutes
@@ -117,7 +117,7 @@ setInterval(async () => {
 
 ---
 
-### 4. **Redis Queue Memory Growth** ❌
+### 4. **Redis Queue Memory Growth** 
 
 **Problem:** BullMQ queue was accumulating completed/failed jobs forever.
 
@@ -151,7 +151,7 @@ export const interactiveQueue = new Queue("interactiveQueue", {
 
 ---
 
-### 5. **No Memory Threshold Monitoring** ❌
+### 5. **No Memory Threshold Monitoring** 
 
 **Problem:** No proactive action when memory gets high.
 
@@ -166,7 +166,7 @@ setInterval(async () => {
   const memory = await dockerMaintenance.getMemoryUsage();
   if (memory && memory.percent > 75) {
     console.warn(
-      `⚠️ Memory usage at ${memory.percent}% - aggressive cleanup...`
+      `️ Memory usage at ${memory.percent}% - aggressive cleanup...`
     );
     await dockerMaintenance.emergencyCleanup();
 
@@ -186,12 +186,12 @@ setInterval(async () => {
 
 | Issue               | Interval Before | Interval After | Status   |
 | ------------------- | --------------- | -------------- | -------- |
-| Rate limit cleanup  | 60s             | 30s            | ✅ Fixed |
-| Socket cleanup      | Manual only     | Every 2 min    | ✅ Fixed |
-| Container cleanup   | 3 min           | 30 min\*       | ✅ Fixed |
-| Deep Docker cleanup | 60 min          | 30 min         | ✅ Fixed |
-| Memory monitoring   | None            | 1 min          | ✅ Added |
-| Redis job cleanup   | Never           | Immediate      | ✅ Fixed |
+| Rate limit cleanup  | 60s             | 30s            |  Fixed |
+| Socket cleanup      | Manual only     | Every 2 min    |  Fixed |
+| Container cleanup   | 3 min           | 30 min\*       |  Fixed |
+| Deep Docker cleanup | 60 min          | 30 min         |  Fixed |
+| Memory monitoring   | None            | 1 min          |  Added |
+| Redis job cleanup   | Never           | Immediate      |  Fixed |
 
 \*Note: Container cleanup stays at 30 min, but memory-triggered cleanup is now aggressive.
 
@@ -201,11 +201,11 @@ setInterval(async () => {
 
 After these fixes, your t3.micro should:
 
-- ✅ Stay stable for **weeks** instead of 1-2 days
-- ✅ Release memory proactively before exhaustion
-- ✅ Remove stale containers and Redis jobs automatically
-- ✅ Log memory usage for monitoring
-- ✅ Trigger emergency cleanup when memory > 75%
+-  Stay stable for **weeks** instead of 1-2 days
+-  Release memory proactively before exhaustion
+-  Remove stale containers and Redis jobs automatically
+-  Log memory usage for monitoring
+-  Trigger emergency cleanup when memory > 75%
 
 ---
 
@@ -214,10 +214,10 @@ After these fixes, your t3.micro should:
 Check the new logs for:
 
 ```
-📊 Memory stats - Clients: 5, RateLimit Map: 12, SocketStatus Map: 5
-⚠️ userExecutionCount size: 150, deleted: 45
-🧹 Running periodic container cleanup...
-⚠️ Memory above 80%, triggering emergency cleanup...
+ Memory stats - Clients: 5, RateLimit Map: 12, SocketStatus Map: 5
+️ userExecutionCount size: 150, deleted: 45
+ Running periodic container cleanup...
+️ Memory above 80%, triggering emergency cleanup...
 ```
 
 ---
@@ -225,7 +225,7 @@ Check the new logs for:
 ## Additional Recommendations for t3.micro
 
 1. **Increase swap space** (temporary storage for less critical data)
-2. **Set max concurrent executions to 1** ✅ Already configured
+2. **Set max concurrent executions to 1**  Already configured
 3. **Monitor `/health` endpoint regularly**:
 
    ```bash

@@ -391,11 +391,11 @@ setInterval(() => {
   const socketStatusSize = socketExecutingStatus.size;
 
   console.log(
-    `📊 Memory stats - Clients: ${clientCount}, RateLimit Map: ${rateLimitSize}, SocketStatus Map: ${socketStatusSize}`
+    ` Memory stats - Clients: ${clientCount}, RateLimit Map: ${rateLimitSize}, SocketStatus Map: ${socketStatusSize}`
   );
 
   if (socketStatusSize > clientCount + 10) {
-    console.warn("⚠️ Socket status map larger than clients, force cleanup...");
+    console.warn("️ Socket status map larger than clients, force cleanup...");
     for (const [socketId] of socketExecutingStatus.entries()) {
       if (!io.sockets.sockets.has(socketId)) {
         socketExecutingStatus.delete(socketId);
@@ -415,24 +415,24 @@ setInterval(() => {
   }
   if (userExecutionCount.size > 100) {
     console.warn(
-      `⚠️ userExecutionCount size: ${userExecutionCount.size}, deleted: ${deleted}`
+      `️ userExecutionCount size: ${userExecutionCount.size}, deleted: ${deleted}`
     );
   }
 }, 30000); 
 
 setInterval(async () => {
-  console.log("🧹 Running periodic container cleanup...");
+  console.log(" Running periodic container cleanup...");
   await cleanupAllContainers();
-}, 1800000); // 30 minutes
+}, 1800000); 
 
 setInterval(async () => {
-  console.log("🧹 Running scheduled Docker cleanup...");
+  console.log(" Running scheduled Docker cleanup...");
   try {
     await dockerMaintenance.fullCleanup();
     await dockerMaintenance.getDiskUsage();
     const memory = await dockerMaintenance.getMemoryUsage();
     if (memory && memory.percent > 80) {
-      console.warn("⚠️ Memory above 80%, triggering emergency cleanup...");
+      console.warn("️ Memory above 80%, triggering emergency cleanup...");
       await dockerMaintenance.emergencyCleanup();
     }
   } catch (error) {

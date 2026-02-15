@@ -4,7 +4,7 @@ import TextType from "../components/textType";
 import { useAuth } from "../context/authContext";
 import { Link, Trash, Plus, AlertTriangle } from "lucide-react";
 import axios from "axios";
-import {useRouter} from "next/navigation";
+import { useRouter } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
 
 interface Project {
@@ -19,7 +19,10 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [projectName, setProjectName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
@@ -67,13 +70,14 @@ export default function Dashboard() {
           withCredentials: true,
         }
       );
-      
+
       setProjects([...projects, response.data.project]);
       setProjectName("");
       setIsModalOpen(false);
       toast.success("Project created successfully!");
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || "Failed to create project";
+      const errorMessage =
+        error.response?.data?.message || "Failed to create project";
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -167,7 +171,11 @@ export default function Dashboard() {
                 onClick={() => setIsModalOpen(true)}
                 disabled={projects.length >= 3}
                 className="flex rounded-xl items-center gap-2 px-5 py-2 border border-slate-700 hover:border-purple-500 hover:bg-purple-500/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-slate-700 disabled:hover:bg-transparent"
-                title={projects.length >= 3 ? "Maximum 3 projects allowed" : "Create new project"}
+                title={
+                  projects.length >= 3
+                    ? "Maximum 3 projects allowed"
+                    : "Create new project"
+                }
               >
                 <Plus className="w-4 h-4" />
                 <span className="text-sm">New</span>
@@ -196,7 +204,15 @@ export default function Dashboard() {
             ) : (
               <div className="grid gap-px">
                 {projects.map((project, index) => (
-                  <div key={project._id} className="border-b border-slate-800 group">
+                  <div
+                    key={project._id}
+                    className="border-b border-slate-800 group"
+                    onClick={(e) => {
+                            e.stopPropagation();
+                            toast("Opening project...");
+                            router.push(`/editor/${project._id}`);
+                    }}
+                  >
                     <div className="p-6 flex items-center justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
@@ -206,19 +222,23 @@ export default function Dashboard() {
                           </h3>
                         </div>
                         <p className="text-xs text-slate-600 font-mono">
-                          Updated {new Date(project.updatedAt).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })}
+                          Updated{" "}
+                          {new Date(project.updatedAt).toLocaleDateString(
+                            "en-US",
+                            {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            }
+                          )}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            toast("Opening project...",);
-                            router.push(`/editor/${project._id}`)
+                            toast("Opening project...");
+                            router.push(`/editor/${project._id}`);
                           }}
                           className="p-2"
                           title="Open"
@@ -305,8 +325,10 @@ export default function Dashboard() {
               <div className="p-6 space-y-4">
                 <p className="text-slate-400 text-sm">
                   Are you sure you want to delete{" "}
-                  <span className="text-slate-200 font-medium">"{projectToDelete.name}"</span>?
-                  This action cannot be undone.
+                  <span className="text-slate-200 font-medium">
+                    "{projectToDelete.name}"
+                  </span>
+                  ? This action cannot be undone.
                 </p>
 
                 <div className="flex gap-3 pt-4">

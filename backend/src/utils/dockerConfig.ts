@@ -30,7 +30,7 @@ export const getDockerConfig = (language: string): DockerConfig | null => {
       image: "frolvlad/alpine-gxx",
       command: "g++ -O2 -o /tmp/prog /app/main.cpp && /tmp/prog",
       pidsLimit: 50,
-      memory: "120m",  // Compilation needs slightly more
+      memory: "120m",  
       cpus: "0.4"
     },
     c: {

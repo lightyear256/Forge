@@ -71,7 +71,7 @@ export default function SignUp() {
       const registrationData = {
         ...formData
       };
-
+      console.log("hello this the env ",process.env.NEXT_PUBLIC_API_URL);
       const result = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/user/register`,
         registrationData,
         {withCredentials:true}
@@ -135,7 +135,7 @@ export default function SignUp() {
   };
 
   return (
-    <div className="pt-25 min-h-screen flex flex-col lg:flex-row w-full bg-gradient-to-br from-gray-950 via-black to-gray-900 text-gray-50">
+    <div className="pt-25 min-h-screen flex flex-col lg:flex-row w-full bg-linear-to-br from-gray-950 via-black to-gray-900 text-gray-50">
       <section className="flex-1 flex items-center justify-center p-6 lg:p-12 pt-28 lg:pt-12">
         <div className="w-full max-w-lg">
           <div className="flex flex-col gap-8">
@@ -144,7 +144,7 @@ export default function SignUp() {
                 <Sparkles className="w-4 h-4" />
                 <span>Join us today</span>
               </div>
-              <h1 className="text-5xl lg:text-6xl font-bold leading-tight bg-gradient-to-br from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+              <h1 className="text-5xl lg:text-6xl font-bold leading-tight bg-linear-to-br from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
                 Sign Up
               </h1>
               <p className="text-gray-400 text-lg">
@@ -242,7 +242,7 @@ export default function SignUp() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 py-3.5 font-semibold text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 group"
+                className="w-full rounded-xl bg-linear-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 py-3.5 font-semibold text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 group"
               >
                 {loading ? (
                   'Creating Account...'
