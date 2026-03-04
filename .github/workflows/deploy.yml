@@ -22,9 +22,12 @@ jobs:
 
       - name: Deploy on EC2
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            ssh ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             cd ~/Forge
             git pull origin main
-            docker compose down
-            docker compose up -d --build
-          EOF
+
+            docker compose build
+            docker compose up -d
+
+            docker image prune -f
+            EOF
