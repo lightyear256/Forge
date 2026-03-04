@@ -89,7 +89,7 @@ services:
       - "5000:5000"
     
     env_file:
-    - ./backend/.env.local
+    - ./backend/.env
     
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
