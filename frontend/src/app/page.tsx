@@ -44,7 +44,7 @@ export default function Home() {
           </div>
 
           {!isAuthenticated?<div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full sm:w-auto px-4">
-            <Link href="/signup" className="w-full sm:w-auto">
+            <Link href="/register" className="w-full sm:w-auto">
               <button className="w-full sm:w-auto text-base sm:text-lg md:text-xl rounded-full px-8 sm:px-10 py-2.5 sm:py-3 font-semibold transition-all duration-300 transform hover:scale-105 bg-black ">
                 Sign Up
               </button>
