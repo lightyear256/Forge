@@ -18,6 +18,11 @@ import {
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { getDockerStatus } from "./utils/dockerRunner.js";
+import {
+  metricsMiddleware,
+  metricsHandler,
+  updateDockerMetrics,
+} from "./middleware/metricsMiddleware.js";
 
 const execAsync = promisify(exec);
 
@@ -36,7 +41,7 @@ const cleanupAllContainers = async () => {
 
     const { stdout: allContainers } = await execAsync(
       'docker ps -a --filter "name=exec-" --format "{{.Names}}"',
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const containerNames = allContainers
@@ -72,7 +77,7 @@ const cleanupAllContainers = async () => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const { stdout: remaining } = await execAsync(
       'docker ps -a --filter "name=exec-" --format "{{.Names}}"',
-      { timeout: 5000 }
+      { timeout: 5000 },
     );
 
     const remainingContainers = remaining
@@ -83,7 +88,7 @@ const cleanupAllContainers = async () => {
     if (remainingContainers.length > 0) {
       console.error(
         ` ${remainingContainers.length} containers still remain:`,
-        remainingContainers
+        remainingContainers,
       );
     } else {
       console.log(" All containers successfully cleaned up");
@@ -126,17 +131,23 @@ const io = new Server(httpServer, {
 
 app.use(
   cors({
-    origin: true, 
+    origin: true,
     credentials: true,
-  })
+  }),
 );
 
 app.use(cookieParser());
 
 connectDB();
 
+// Add Prometheus metrics middleware
+app.use(metricsMiddleware);
+
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+// Metrics endpoint for Prometheus
+app.get("/metrics", metricsHandler);
 
 app.use("/user", userRouter);
 app.use("/project", projectRouter);
@@ -152,6 +163,23 @@ app.get("/health", async (req, res) => {
   const memory = await dockerMaintenance.getMemoryUsage();
   const stuck = await dockerMaintenance.getStuckContainers();
   const runnerStatus = getDockerStatus();
+
+  // Update Docker metrics for Prometheus
+  try {
+    const { stdout } = await execAsync(
+      'docker ps -a --filter "name=exec-" --format "{{.Status}}"',
+      { timeout: 5000 },
+    );
+    const containers = stdout
+      .trim()
+      .split("\n")
+      .filter((s) => s);
+    const running = containers.filter((s) => s.startsWith("Up")).length;
+    const stopped = containers.length - running;
+    updateDockerMetrics(running, stopped);
+  } catch (e) {
+    console.error("Failed to update Docker metrics:", e);
+  }
 
   res.json({
     status: dockerHealth.healthy ? "healthy" : "unhealthy",
@@ -184,7 +212,7 @@ const { worker, activeProcesses } = await setupInteractiveWorker(io);
 setupDockerMonitoring();
 
 const checkRateLimit = (
-  userId: string
+  userId: string,
 ): { allowed: boolean; remaining: number } => {
   const now = Date.now();
   const userLimit = userExecutionCount.get(userId);
@@ -376,7 +404,7 @@ io.on("connection", (socket) => {
     await cleanupSocketContainers(socket.id);
 
     console.log(
-      `  Socket memory cleaned. Active sockets: ${io.engine.clientsCount}`
+      `  Socket memory cleaned. Active sockets: ${io.engine.clientsCount}`,
     );
   });
 });
@@ -391,7 +419,7 @@ setInterval(() => {
   const socketStatusSize = socketExecutingStatus.size;
 
   console.log(
-    ` Memory stats - Clients: ${clientCount}, RateLimit Map: ${rateLimitSize}, SocketStatus Map: ${socketStatusSize}`
+    ` Memory stats - Clients: ${clientCount}, RateLimit Map: ${rateLimitSize}, SocketStatus Map: ${socketStatusSize}`,
   );
 
   if (socketStatusSize > clientCount + 10) {
@@ -402,7 +430,7 @@ setInterval(() => {
       }
     }
   }
-}, 120000); 
+}, 120000);
 
 setInterval(() => {
   const now = Date.now();
@@ -415,15 +443,15 @@ setInterval(() => {
   }
   if (userExecutionCount.size > 100) {
     console.warn(
-      `️ userExecutionCount size: ${userExecutionCount.size}, deleted: ${deleted}`
+      `️ userExecutionCount size: ${userExecutionCount.size}, deleted: ${deleted}`,
     );
   }
-}, 30000); 
+}, 30000);
 
 setInterval(async () => {
   console.log(" Running periodic container cleanup...");
   await cleanupAllContainers();
-}, 1800000); 
+}, 1800000);
 
 setInterval(async () => {
   console.log(" Running scheduled Docker cleanup...");
@@ -438,7 +466,7 @@ setInterval(async () => {
   } catch (error) {
     console.error("Scheduled cleanup error:", error);
   }
-}, 1800000); 
+}, 1800000);
 
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, () => {
