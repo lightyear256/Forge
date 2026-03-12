@@ -1,8 +1,4 @@
 import { exec } from "child_process";
-import { writeFile, unlink, mkdir, rm } from "fs/promises";
-import { randomBytes } from "crypto";
-import { join } from "path";
-import { tmpdir } from "os";
 import { promisify } from "util";
 import {
   getDockerConfig,
@@ -27,13 +23,13 @@ const MAX_NON_INTERACTIVE_EXECUTIONS = 1;
 const checkSystemMemory = async (): Promise<boolean> => {
   try {
     const { stdout } = await execAsync(
-      "free -m | grep Mem | awk '{print ($3/$2) * 100.0}'"
+      "free -m | grep Mem | awk '{print ($3/$2) * 100.0}'",
     );
     const memoryUsagePercent = parseFloat(stdout.trim());
 
     if (memoryUsagePercent > 75) {
       console.error(
-        ` Memory usage critical: ${memoryUsagePercent.toFixed(1)}%`
+        ` Memory usage critical: ${memoryUsagePercent.toFixed(1)}%`,
       );
       return false;
     }
@@ -46,7 +42,7 @@ const checkSystemMemory = async (): Promise<boolean> => {
 const checkDiskSpace = async (): Promise<boolean> => {
   try {
     const { stdout } = await execAsync(
-      "df -h /var/lib/docker | tail -1 | awk '{print $5}' | sed 's/%//'"
+      "df -h /var/lib/docker | tail -1 | awk '{print $5}' | sed 's/%//'",
     );
     const usage = parseInt(stdout.trim());
 
@@ -68,7 +64,7 @@ const checkDockerHealth = async (): Promise<boolean> => {
   } catch (error) {
     dockerFailureCount++;
     console.error(
-      ` Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`
+      ` Docker health check failed (${dockerFailureCount}/${MAX_DOCKER_FAILURES})`,
     );
     return false;
   }
@@ -78,7 +74,7 @@ const runDocker = async (
   language: string,
   code: string,
   input?: string,
-  filename?: string
+  filename?: string,
 ): Promise<ExecutionResult> => {
   while (activeNonInteractiveExecutions >= MAX_NON_INTERACTIVE_EXECUTIONS) {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -86,7 +82,7 @@ const runDocker = async (
 
   activeNonInteractiveExecutions++;
   console.log(
-    ` Non-interactive executions: ${activeNonInteractiveExecutions}/${MAX_NON_INTERACTIVE_EXECUTIONS}`
+    ` Non-interactive executions: ${activeNonInteractiveExecutions}/${MAX_NON_INTERACTIVE_EXECUTIONS}`,
   );
 
   try {
@@ -135,23 +131,18 @@ const runDocker = async (
       };
     }
 
-    const tempId = randomBytes(16).toString("hex");
-    const tempDir = tmpdir();
     const ext = getFileExtension(language);
 
     let actualFileName: string;
-    let containerFileName: string;
     let command: string;
 
     if (language.toLowerCase() === "java") {
       const javaClassName = getJavaClassName(code);
       if (javaClassName) {
         actualFileName = `${javaClassName}.java`;
-        containerFileName = actualFileName;
 
-        command = `javac /app/${containerFileName} -d /tmp && java -cp /tmp ${javaClassName}`;
+        command = `javac /app/${actualFileName} -d /tmp && java -cp /tmp ${javaClassName}`;
       } else {
-
         return {
           stdout: "",
           stderr:
@@ -166,22 +157,21 @@ const runDocker = async (
       } else {
         actualFileName = `main.${ext}`;
       }
-      containerFileName = actualFileName;
 
       if (language.toLowerCase() === "python") {
-        command = `python3 -u /app/${containerFileName}`;
+        command = `python3 -u /app/${actualFileName}`;
       } else if (language.toLowerCase() === "javascript") {
-        command = `node /app/${containerFileName}`;
+        command = `node /app/${actualFileName}`;
       } else if (language.toLowerCase() === "cpp") {
-        command = `g++ -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
+        command = `g++ -O2 /app/${actualFileName} -o /tmp/code && /tmp/code`;
       } else if (language.toLowerCase() === "c") {
-        command = `gcc -O2 /app/${containerFileName} -o /tmp/code && /tmp/code`;
+        command = `gcc -O2 /app/${actualFileName} -o /tmp/code && /tmp/code`;
       } else if (language.toLowerCase() === "go") {
-        command = `go run /app/${containerFileName}`;
+        command = `go run /app/${actualFileName}`;
       } else if (language.toLowerCase() === "ruby") {
-        command = `ruby /app/${containerFileName}`;
+        command = `ruby /app/${actualFileName}`;
       } else if (language.toLowerCase() === "rust") {
-        command = `rustc /app/${containerFileName} -o /tmp/code && /tmp/code`;
+        command = `rustc /app/${actualFileName} -o /tmp/code && /tmp/code`;
       } else {
         return {
           stdout: "",
@@ -191,80 +181,61 @@ const runDocker = async (
       }
     }
 
-    const tempDirPath = join(tempDir, tempId);
-    const tempFile = join(tempDirPath, actualFileName);
+    console.log(` Running: ${language} - ${actualFileName}`);
 
-    try {
-      await mkdir(tempDirPath, { recursive: true });
-      await writeFile(tempFile, code, "utf8");
+    const codeBuffer = Buffer.from(code, "utf8");
+    const byteCount = codeBuffer.length;
+    const shellCmd = `mkdir -p /app && dd if=/dev/stdin of=/app/${actualFileName} bs=1 count=${byteCount} 2>/dev/null && timeout 10 ${command}`;
+    const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --memory-swap="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} --ulimit nofile=100:100 ${config.image} sh -c "${shellCmd}"`;
 
-      console.log(` Running: ${language} - ${actualFileName}`);
+    return await new Promise<ExecutionResult>((resolve) => {
+      const proc = exec(
+        dockerCmd,
+        {
+          timeout: 12000,
+          maxBuffer: 512 * 1024,
+          killSignal: "SIGKILL",
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            if (
+              error.message.includes("docker") ||
+              error.message.includes("Docker")
+            ) {
+              dockerFailureCount++;
+            }
 
-      const hostMountPath = tempDirPath.replace(/\\/g, "/");
-
-      const dockerCmd = `docker run --rm -i --pull=never --network none --memory="${config.memory}" --memory-swap="${config.memory}" --cpus="${config.cpus}" --pids-limit=${config.pidsLimit} --ulimit nofile=100:100 -v "${hostMountPath}:/app:ro" ${config.image} sh -c "${command}"`;
-
-      return await new Promise<ExecutionResult>((resolve) => {
-        const process = exec(
-          dockerCmd,
-          {
-            timeout: 10000,
-            maxBuffer: 512 * 1024, // 512KB
-            killSignal: "SIGKILL",
-          },
-          async (error, stdout, stderr) => {
-            await unlink(tempFile).catch(() => {});
-            await rm(tempDirPath, { recursive: true, force: true }).catch(
-              () => {}
-            );
-
-            if (error) {
-              if (
-                error.message.includes("docker") ||
-                error.message.includes("Docker")
-              ) {
-                dockerFailureCount++;
-              }
-
-              if (error.killed) {
-                resolve({
-                  stdout: stdout?.toString() ?? "",
-                  stderr: "Execution timeout (10s limit exceeded)",
-                  error: "Timeout",
-                });
-              } else {
-                resolve({
-                  stdout: stdout?.toString() ?? "",
-                  stderr: stderr?.toString() ?? error.message,
-                  error: error.message,
-                });
-              }
-            } else {
-              dockerFailureCount = 0;
-
+            if (error.killed) {
               resolve({
                 stdout: stdout?.toString() ?? "",
-                stderr: stderr?.toString() ?? "",
+                stderr: "Execution timeout (10s limit exceeded)",
+                error: "Timeout",
+              });
+            } else {
+              resolve({
+                stdout: stdout?.toString() ?? "",
+                stderr: stderr?.toString() ?? error.message,
+                error: error.message,
               });
             }
+          } else {
+            dockerFailureCount = 0;
+            resolve({
+              stdout: stdout?.toString() ?? "",
+              stderr: stderr?.toString() ?? "",
+            });
           }
-        );
+        },
+      );
 
-        if (input && process.stdin) {
-          process.stdin.write(input);
-          process.stdin.end();
+      if (proc.stdin) {
+        proc.stdin.write(codeBuffer);
+        if (input) {
+          proc.stdin.write(input);
         }
-      });
-    } catch (err: any) {
-      await unlink(tempFile).catch(() => {});
-      await rm(tempDirPath, { recursive: true, force: true }).catch(() => {});
-
-      return {
-        stdout: "",
-        stderr: err.message ?? "Unknown error",
-        error: err.message,
-      };
-    }
+        proc.stdin.end();
+      }
+    });
   } finally {
     activeNonInteractiveExecutions--;
   }

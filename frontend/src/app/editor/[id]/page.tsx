@@ -71,6 +71,7 @@ export default function CodeEditor() {
 
   const isRunningRef = useRef(false);
   const runningJobIdRef = useRef<string>("");
+  const safetyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (terminalRef.current) {
@@ -136,7 +137,7 @@ export default function CodeEditor() {
     setIsTerminalVisible(true);
     resizeRef.current = {
       startY: e.clientY,
-      startHeight: 0, // Start from hidden
+      startHeight: 0, 
     };
   };
 
@@ -180,6 +181,10 @@ export default function CodeEditor() {
 
     newSocket.on("execution-complete", (data: { exitCode: number }) => {
       console.log(" Execution complete with code:", data.exitCode);
+      if (safetyTimeoutRef.current) {
+        clearTimeout(safetyTimeoutRef.current);
+        safetyTimeoutRef.current = null;
+      }
       isRunningRef.current = false;
       runningJobIdRef.current = "";
 
@@ -381,10 +386,8 @@ export default function CodeEditor() {
     }
   };
 
-  // Add this ref near your other refs
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Add this new debouncedSave
   const debouncedSave = useCallback(() => {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -394,7 +397,6 @@ export default function CodeEditor() {
     }, 1000);
   }, [code, currentFile, projectId]);
 
-  // Add cleanup
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
@@ -403,7 +405,6 @@ export default function CodeEditor() {
     };
   }, []);
   const runCode = async () => {
-    // Validation checks
     if (!currentFile) {
       toast.error("Please select a file first");
       return;
@@ -451,6 +452,19 @@ export default function CodeEditor() {
         runningJobIdRef.current = response.data.jobId;
         setCurrentJobId(response.data.jobId);
         console.log(" Job started with ID:", response.data.jobId);
+
+        safetyTimeoutRef.current = setTimeout(() => {
+          if (isRunningRef.current) {
+            isRunningRef.current = false;
+            runningJobIdRef.current = "";
+            setIsRunning(false);
+            setCurrentJobId("");
+            addOutput(
+              "\n[No response from server - execution may have failed]",
+              "error",
+            );
+          }
+        }, 40000);
       } else {
         isRunningRef.current = false;
         runningJobIdRef.current = "";
@@ -544,7 +558,6 @@ export default function CodeEditor() {
       />
 
       <div className="pt-16 md:pt-20 h-screen bg-black text-gray-50 flex flex-col md:flex-row overflow-hidden">
-        {/* Sidebar */}
         <div className="w-full md:w-64 lg:w-72 bg-black border-b md:border-b-0 md:border-r border-slate-800 flex flex-col max-h-[40vh] md:max-h-none">
           <div className="p-4 md:p-6 border-b border-slate-800 flex items-center justify-between">
             <h2 className="text-xs uppercase tracking-widest text-slate-500">
@@ -705,9 +718,7 @@ export default function CodeEditor() {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
-          {/* Top Bar */}
           <div className="h-12 md:h-16 bg-black border-b border-slate-800 flex items-center justify-between px-4 md:px-6 gap-2 shrink-0">
             <div className="flex items-center gap-3 md:gap-6 min-w-0 flex-1">
               <span className="text-xs md:text-sm text-slate-400 font-light truncate">
@@ -761,9 +772,7 @@ export default function CodeEditor() {
             </div>
           </div>
 
-          {/* Editor and Terminal Container */}
           <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            {/* Editor */}
             <div className="flex-1 border-b border-slate-800 min-h-0 overflow-hidden">
               {currentFile ? (
                 <Editor
@@ -813,7 +822,6 @@ export default function CodeEditor() {
               )}
             </div>
 
-            {/* Terminal */}
             {isTerminalVisible && (
               <div
                 style={{
@@ -879,7 +887,6 @@ export default function CodeEditor() {
               </div>
             )}
 
-            {/* Terminal Toggle Bar */}
             {!isTerminalVisible && (
               <div
                 onMouseDown={startResizeFromBottom}
