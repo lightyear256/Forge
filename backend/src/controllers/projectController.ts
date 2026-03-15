@@ -70,7 +70,7 @@ export const getAllProject = async (req: Request, res: Response) => {
 
     const projects = await projectModel
       .find({ userId })
-      .select('name updatedAt') 
+      .select('name updatedAt files') 
       .sort({ updatedAt: -1 }); 
 
     res.status(200).json({

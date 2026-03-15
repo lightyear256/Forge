@@ -1,7 +1,5 @@
 export interface DockerConfig {
-  fileName: string;
   image: string;
-  command: string;
   pidsLimit: number;
   memory: string;
   cpus: string;
@@ -10,65 +8,49 @@ export interface DockerConfig {
 export const getDockerConfig = (language: string): DockerConfig | null => {
   const configs: Record<string, DockerConfig> = {
     python: {
-      fileName: "main.py",
       image: "python:3.11-alpine",
-      command: "python3 -u /app/main.py",
       pidsLimit: 50,
       memory: "100m",  
       cpus: "0.4"      
     },
     javascript: {
-      fileName: "main.js",
       image: "node:20-alpine",
-      command: "node /app/main.js",
       pidsLimit: 50,
       memory: "100m",
       cpus: "0.4"
     },
     cpp: {
-      fileName: "main.cpp",
       image: "frolvlad/alpine-gxx",
-      command: "g++ -O2 -o /tmp/prog /app/main.cpp && /tmp/prog",
       pidsLimit: 50,
       memory: "120m",  
       cpus: "0.4"
     },
     c: {
-      fileName: "main.c",
       image: "frolvlad/alpine-gxx",
-      command: "gcc -O2 -o /tmp/prog /app/main.c && /tmp/prog",
       pidsLimit: 50,
       memory: "120m",
       cpus: "0.4"
     },
     java: {
-      fileName: "Main.java",
       image: "eclipse-temurin:17-alpine",
-      command: "javac /app/Main.java -d /tmp && java -cp /tmp Main",  
       pidsLimit: 50,
       memory: "150m",
       cpus: "0.4"
     },
     go: {
-      fileName: "main.go",
       image: "golang:1.21-alpine",
-      command: "go run /app/main.go",
       pidsLimit: 50,
       memory: "120m",
       cpus: "0.4"
     },
     ruby: {
-      fileName: "main.rb",
       image: "ruby:3.2-alpine",
-      command: "ruby /app/main.rb",
       pidsLimit: 50,
       memory: "100m",
       cpus: "0.4"
     },
     rust: {
-      fileName: "main.rs",
       image: "rust:alpine",
-      command: "rustc /app/main.rs -o /tmp/prog && /tmp/prog",
       pidsLimit: 50,
       memory: "150m",  
       cpus: "0.4"

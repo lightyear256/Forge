@@ -11,18 +11,11 @@ import { connectDB } from "./config/db.js";
 import { projectRouter } from "./routes/projectRoute.js";
 import { interactiveRouter } from "./routes/interactiveRoute.js";
 import { setupInteractiveWorker } from "./worker/interactiveWorker.js";
-import {
-  dockerMaintenance,
-  setupDockerMonitoring,
-} from "./utils/dockerMaintainence.js";
+import {dockerMaintenance,setupDockerMonitoring} from "./utils/dockerMaintainence.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { getDockerStatus } from "./utils/dockerRunner.js";
-import {
-  metricsMiddleware,
-  metricsHandler,
-  updateDockerMetrics,
-} from "./middleware/metricsMiddleware.js";
+import {metricsMiddleware,metricsHandler,updateDockerMetrics} from "./middleware/metricsMiddleware.js";
 
 const execAsync = promisify(exec);
 
